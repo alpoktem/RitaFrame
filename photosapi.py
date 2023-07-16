@@ -6,7 +6,7 @@ from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 import requests
 import json
-import pandas as pd
+# import pandas as pd
 
 
 class GooglePhotosApi:
@@ -134,4 +134,44 @@ def get_album_df(album_name, creds):
 
     return df
 
+def get_album_dict(album_name, creds):
+    album_dict = {}
+    album_id = get_album_id_from_album_name(album_name, creds)
+
+    if not album_id:
+        print(f"ERROR: Album with name {album_id} not found")
+    else:
+        # create request for specified album
+        response = get_photos_in_album(album_id, creds)
+
+        data = response.json()
+
+        media_items = data.get("mediaItems", [])
+        album_dict = {
+            "baseUrl": [],
+            "filename": [],
+            "mimeType": [],
+            "creationTime": [],
+            "width": [],
+            "height": []
+        }
+
+        for item in media_items:
+            album_dict["baseUrl"].append(item.get("baseUrl"))
+            album_dict["filename"].append(item.get("filename"))
+            album_dict["mimeType"].append(item.get("mimeType"))
+            album_dict["creationTime"].append(item.get("mediaMetadata", {}).get("creationTime"))
+            album_dict["width"].append(item.get("mediaMetadata", {}).get("width"))
+            album_dict["height"].append(item.get("mediaMetadata", {}).get("height"))
+
+        # Sort the album dictionary by creationTime
+        album_dict = {k: v for k, v in sorted(album_dict.items(), key=lambda x: x[1])}
+
+        #DEBUG print
+        print("filename", "creationTime", "mimeType", "width", "height")
+        for i in range(len(album_dict["filename"])):
+            print(album_dict["filename"][i], album_dict["creationTime"][i], album_dict["mimeType"][i],
+                  album_dict["width"][i], album_dict["height"][i])
+
+    return album_dict
 
