@@ -1,7 +1,16 @@
 from flask import Flask, render_template
 from photosapi import GooglePhotosApi, get_album_dict
+import RPi.GPIO as GPIO
+import threading, time, subprocess, os
+import uvicorn
 
 app = Flask(__name__)
+# socketio = SocketIO(app)
+
+#initialize gpio connection
+GPIO.setmode(GPIO.BCM)
+pir_pin = 17 #TODO: get this from a config file
+GPIO.setup(pir_pin, GPIO.IN)
 
 # initialize photos api and create service
 google_photos_api = GooglePhotosApi()
@@ -13,6 +22,22 @@ FRAME_LONG_EDGE = "800"
 FRAME_SHORT_EDGE = "480"
 
 show_photo_no = 0 
+
+def motion_detection_thread():
+    while True:
+        motion_detected = GPIO.input(pir_pin)
+        if motion_detected:
+            print("Motion detected!", end=' ')
+            try:
+                env = os.environ.copy()
+                env['DISPLAY'] = ":0"
+                subprocess.run(["xset", "dpms", "force", "on"], env=env, check=True)
+                print("Screen waking up...")
+            except subprocess.CalledProcessError as e:
+                print("Error waking up screen:", e)
+        # else:
+        #     print("No motion")
+        time.sleep(1)  # Adjust the sleep duration as needed
 
 @app.route('/')
 def index():
@@ -43,8 +68,16 @@ def index():
     return render_template('index.html', photo=complete_url)
 
 if __name__ == '__main__':
-    app.run(port=8000, debug=True)
+    # app.run(port=8000, debug=True)
+    # socketio.run(app, port=8000, debug=True)
 
+    motion_status = "No motion"  # Initialize motion status
+    # Start the motion detection thread
+    motion_thread = threading.Thread(target=motion_detection_thread)
+    motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
+    motion_thread.start()
 
+    # app.run(port=8000, debug=True)
+    uvicorn.run(app, host='0.0.0.0', port=8000)
 
 
