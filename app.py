@@ -2,7 +2,7 @@ from flask import Flask, render_template
 from photosapi import GooglePhotosApi, get_album_dict
 import RPi.GPIO as GPIO
 import threading, time, subprocess, os
-import uvicorn
+# import uvicorn
 
 app = Flask(__name__)
 # socketio = SocketIO(app)
@@ -77,7 +77,7 @@ if __name__ == '__main__':
     motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
     motion_thread.start()
 
-    # app.run(port=8000, debug=True)
-    uvicorn.run(app, host='0.0.0.0', port=8000)
+    app.run(port=8000, debug=True)
+    # uvicorn.run(app, host='0.0.0.0', port=8000)
 
 
