@@ -66,7 +66,7 @@ PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to conn
     
 7. **View the app on browser**:
 
-    Open your browser and direct it to `localhost:8000` to start viewing the photos on loop. 
+    Open your browser and direct it to [localhost:8000](http://localhost:8000) to start viewing the photos on loop. 
 
 ## Autostart Setup
 
