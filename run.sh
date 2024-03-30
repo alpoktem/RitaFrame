@@ -1,14 +1,14 @@
 #!/bin/bash
 cd /home/pi/Documents/RitaFrame
-sleep 10
 
-# Start unclutter to hide the cursor
-unclutter -idle 0.1 -root &
+# Disable screen blanking
+xset s off
+xset -dpms
+xset s noblank
 
-#Set screen sleep time (seconds)
-export DISPLAY=:0; xset s on s 120
+# Set the environment to production
+export DEBUG_MODE=False
 
-# TODO: Somehow the sensor thread doesn't work with gunicorn
-# gunicorn app:app --access-logfile access.log --error-logfile error.log
+# Run the app
+python -u app.py
 
-python app.py >> run.log

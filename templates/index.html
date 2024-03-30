@@ -10,23 +10,87 @@
             align-items: center;
             height: 100vh;
             margin: 0;
+            cursor: none;
         }
-
+        #photo-wrapper {
+            opacity: 1;
+/*            transition: opacity {{ transition_time_ms|default(2000, true) }}ms ease-in-out;*/
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
         img {
-            border: none;
-            display: block;
             max-width: 100%;
             max-height: 100%;
+            width: auto;
+            height: auto;
+            display: block;
         }
     </style>
-    <script>
-        // Refresh the page every 60 seconds (adjust the interval as needed)
-        setInterval(function() {
-            location.reload();
-        }, 60000);
-    </script>
 </head>
 <body>
-    <img src="{{ photo }}" alt="Photo">
+    <div id="photo-wrapper">
+        <img id="photo" src="{{ photo }}" alt="Photo" loading="lazy">
+    </div>
+    <script>
+        let transitionTime = {{ transition_time_ms|default(2000, true) }};
+        let displayDuration = {{ display_duration_ms|default(5000, true) }};
+
+        // Ensure transition time is applied correctly for instant transitions
+        transitionTime = transitionTime >= 0 ? transitionTime : 0;
+
+        function fetchNextImage() {
+            return fetch('/next-image')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok.');
+                    }
+                    return response.json();
+                })
+                .then(data => data.imageUrl)
+                .catch(error => {
+                    console.error('Error fetching next image:', error);
+                    return null; // Return null if there's an error fetching the image
+                });
+        }
+
+        function updateImage() {
+            fetchNextImage().then(imageUrl => {
+                if (imageUrl) {
+                    const photo = document.getElementById('photo');
+                    const wrapper = document.getElementById('photo-wrapper');
+
+                    // Reset opacity and disable transition if transitionTime is 0
+                    if (transitionTime === 0) {
+                        wrapper.style.transition = 'none';
+                        wrapper.style.opacity = 1;
+                        photo.src = imageUrl;
+                    } else {
+                        // Apply transition and update image after fade-out
+                        wrapper.style.transition = `opacity ${transitionTime}ms ease-in-out`;
+                        wrapper.style.opacity = 0;
+
+                        setTimeout(() => {
+                            photo.src = imageUrl;
+                            wrapper.style.opacity = 1; // Fade in the new image
+                        }, transitionTime);
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Update the image for the first time immediately
+            updateImage();
+
+            // Then set an interval for subsequent updates
+            setInterval(updateImage, displayDuration + transitionTime);
+        });
+    </script>
+
+
+
 </body>
 </html>

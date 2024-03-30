@@ -1,40 +1,55 @@
 import pickle
 import os
-from google_auth_oauthlib.flow import Flow, InstalledAppFlow
-from googleapiclient.discovery import build
-#from googleapiclient.http import MediaFileUpload
+from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import requests
 import json
-# import pandas as pd
+import time
+import logging
 
 
 class GooglePhotosApi:
+
+    """
+    A client for interacting with the Google Photos API.
+
+    Handles authentication, token refresh, and making API calls.
+    """
+
     def __init__(self,
                  api_name = 'photoslibrary',
                  client_secret_file= r'./credentials/client_secret.json',
                  api_version = 'v1',
                  scopes = ['https://www.googleapis.com/auth/photoslibrary']):
-        '''
-        Args:
-            client_secret_file: string, location where the requested credentials are saved
-            api_version: string, the version of the service
-            api_name: string, name of the api e.g."docs","photoslibrary",...
-            api_version: version of the api
+        """
+        Initializes the API client.
 
-        Return:
-            service:
-        '''
+        Args:
+            api_name: Name of the API (default: 'photoslibrary').
+            client_secret_file: Path to where the client secret JSON file will be saved
+            api_version: API version (default: 'v1').
+            scopes: List of scopes for which the application requests access.
+        """
+
 
         self.api_name = api_name
         self.client_secret_file = client_secret_file
         self.api_version = api_version
         self.scopes = scopes
         self.cred_pickle_file = f'./credentials/token_{self.api_name}_{self.api_version}.pickle'
+        self.authenticate()
 
-        self.cred = None
+    def authenticate(self):
+        """
+        Authenticates the user and obtains access credentials.
 
-    def run_local_server(self):
+        Tries to load credentials from a pickle file. If not found or invalid,
+        initiates the authentication flow to obtain new credentials.
+
+        Returns:
+            The authenticated credentials.
+        """
+
         # is checking if there is already a pickle file with relevant credentials
         if os.path.exists(self.cred_pickle_file):
             with open(self.cred_pickle_file, 'rb') as token:
@@ -53,125 +68,157 @@ class GooglePhotosApi:
         
         return self.cred
 
-def get_photos_in_album(album_id, creds):
-    url = 'https://photoslibrary.googleapis.com/v1/mediaItems:search'
-    payload = {
-                  "albumId": album_id
-              }
-    headers = {
-        'content-type': 'application/json',
-        'Authorization': 'Bearer {}'.format(creds.token)
-    }
-    
-    try:
-        res = requests.request("POST", url, data=json.dumps(payload), headers=headers)
-    except:
-        print('Request error') 
-    
-    return(res)
+    def make_api_call(self, method, url, payload=None, headers=None, retries=3, retry_delay=1):
+        """Makes an API call with automatic token refresh if necessary and retries on failures.
 
+        Args:
+            method (str): The HTTP method to use ('GET', 'POST', etc.).
+            url (str): The URL for the API request.
+            payload (dict, optional): The payload to send in the request body (for POST requests).
+            headers (dict, optional): Additional headers to include in the request.
+            retries (int): Number of times to retry the request on server errors.
+            retry_delay (int): Delay in seconds before retrying the request.
 
-
-def get_album_id_from_album_name(album_name, creds):
-    url = 'https://photoslibrary.googleapis.com/v1/albums'
-
-    headers = {
-        'content-type': 'application/json',
-        'Authorization': 'Bearer {}'.format(creds.token)
-    }
-    
-    try:
-        res = requests.request("GET", url, headers=headers)
-
+        Returns:
+            The response from the API call or None in case of failure.
+        """
+        # Ensure headers include the refreshed token
+        if headers is None:
+            headers = {}
+        headers['Authorization'] = 'Bearer {}'.format(self.cred.token)
         
-    except:
-        print('Request error') 
+        for attempt in range(retries + 1):
+            try:
+                response = requests.request(method, url, headers=headers, json=payload)
+                response.raise_for_status()  # Raises an HTTPError for 4XX or 5XX responses
+                
+                return response  # Success, return the response object
 
-    if res.status_code == 200:
-        albums_json = res.json()
+            except requests.exceptions.HTTPError as e:
+                status_code = e.response.status_code
+                
+                if status_code == 401 and self.cred.expired and self.cred.refresh_token:
+                    # Attempt to refresh the access token
+                    logging.info("Access token expired. Attempting to refresh.")
+                    self.cred.refresh(Request())
+                    with open(self.cred_pickle_file, 'wb') as token:
+                        pickle.dump(self.cred, token)
+                    headers['Authorization'] = 'Bearer {}'.format(self.cred.token)  # Update the token in headers
+                    continue  # Retry the request with the refreshed token
 
-        for album in albums_json['albums']:
-            if album['title'] == album_name:
-                return album['id']
-    else:
-        print(res.status_code, res.text)
+                elif 500 <= status_code <= 599:
+                    # Server error, attempt retry
+                    logging.warning(f"Server error ({status_code}): {e}. Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    continue  # Retry the request
+                
+                else:
+                    # For other HTTP errors, do not retry
+                    logging.error(f"HTTP Error: {e}")
+                    break
 
-    return None
-
-def get_album_df(album_name, creds):
-
-    df = pd.DataFrame()
-
-    album_id = get_album_id_from_album_name(album_name, creds)
-
-    if not album_id:
-        print(f"ERROR: Album with name {album_id} not found")
-    else:
-        # create request for specified album
-        response = get_photos_in_album(album_id, creds)
-
-        data = response.json()
+            except Exception as e:
+                logging.error(f"Error making API call: {e}")
+                break  # Break on non-retryable errors
         
-        media_items = data.get("mediaItems", [])
-        df = pd.DataFrame(media_items)
+        return None  # If retries are exhausted or a non-retryable error occurs, return None
 
-        # Extract desired columns (TODO: Sometimes data is empty and this line fails)
-        df = df[["baseUrl", "mediaMetadata", "filename", "mimeType"]]
 
-        # Extract additional columns from mediaMetadata
-        df["creationTime"] = df["mediaMetadata"].apply(lambda x: x.get("creationTime"))
-        df["width"] = df["mediaMetadata"].apply(lambda x: x.get("width"))
-        df["height"] = df["mediaMetadata"].apply(lambda x: x.get("height"))
+    def get_album_id_from_album_name(self, album_name):
+        """
+        Finds an album's ID by its name in Google Photos.
 
-        # Clean up the DataFrame
-        df.drop("mediaMetadata", axis=1, inplace=True)
+        Args:
+            album_name (str): Name of the album.
 
-        df = df.sort_values(by="creationTime", ascending=False)
+        Returns:
+            str or None: The album ID if found, otherwise None.
+        """
 
-        #DEBUG print
-        columns_to_print = ["filename", "creationTime", "mimeType", "width", "height"]
-        print(df.loc[:, columns_to_print].to_string(index=True))
+        url = 'https://photoslibrary.googleapis.com/v1/albums'
+        response = self.make_api_call("GET", url)
+        if response and response.status_code == 200:
+            albums_json = response.json()
+            for album in albums_json['albums']:
+                if album['title'] == album_name:
+                    return album['id']
+        return None
 
-    return df
+    def get_photos_in_album(self, album_id):
+        """
+        Retrieves photos from a specified Google Photos album.
 
-def get_album_dict(album_name, creds):
-    album_dict = {}
-    album_id = get_album_id_from_album_name(album_name, creds)
+        Args:
+            album_id (str): ID of the album to fetch photos from.
 
-    if not album_id:
-        print(f"ERROR: Album with name {album_id} not found")
-    else:
-        # create request for specified album
-        response = get_photos_in_album(album_id, creds)
+        Returns:
+            requests.Response or None: The API response, or None on failure.
+        """
 
+        url = 'https://photoslibrary.googleapis.com/v1/mediaItems:search'
+        payload = {"albumId": album_id}
+
+        # Use the new make_api_call method to handle token validation and refreshing
+        response = self.make_api_call("POST", url, payload=payload)
+
+        # Handle the response based on whether the request was successful
+        if response and response.status_code == 200:
+            return response
+        else:
+            logging.error(f"Failed to retrieve photos from album. Status Code: {response.status_code}" if response else "API call failed.")
+            return None
+
+
+
+    def get_album_dict(self, album_name):
+        """
+        Compiles details of photos in a named album into a dictionary.
+
+        Args:
+            album_name (str): Name of the album.
+            debug_prints (bool): Flag to print out album content (for debugging)
+
+        Returns:
+            dict or None: Photo details if album exists, otherwise None.
+        """
+
+        album_id = self.get_album_id_from_album_name(album_name)
+
+        if not album_id:
+            logging.error(f"ERROR: Album with name {album_name} not found")
+            return None
+
+        # Create request for specified album
+        response = self.get_photos_in_album(album_id)
         data = response.json()
-
         media_items = data.get("mediaItems", [])
+
         album_dict = {
-            "baseUrl": [],
-            "filename": [],
-            "mimeType": [],
-            "creationTime": [],
-            "width": [],
-            "height": []
+            "items": []
         }
 
         for item in media_items:
-            album_dict["baseUrl"].append(item.get("baseUrl"))
-            album_dict["filename"].append(item.get("filename"))
-            album_dict["mimeType"].append(item.get("mimeType"))
-            album_dict["creationTime"].append(item.get("mediaMetadata", {}).get("creationTime"))
-            album_dict["width"].append(item.get("mediaMetadata", {}).get("width"))
-            album_dict["height"].append(item.get("mediaMetadata", {}).get("height"))
+            media_metadata = item.get("mediaMetadata", {})
+            item_info = {
+                "baseUrl": item.get("baseUrl"),
+                "filename": item.get("filename"),
+                "mimeType": item.get("mimeType"),
+                "creationTime": media_metadata.get("creationTime"),
+                "width": media_metadata.get("width"),
+                "height": media_metadata.get("height")
+            }
+            album_dict["items"].append(item_info)
 
-        # Sort the album dictionary by creationTime
-        album_dict = {k: v for k, v in sorted(album_dict.items(), key=lambda x: x[1])}
+        # Sort items by creationTime in descending order
+        album_dict["items"].sort(key=lambda x: x["creationTime"], reverse=True)
 
-        #DEBUG print
-        print("filename", "creationTime", "mimeType", "width", "height")
-        for i in range(len(album_dict["filename"])):
-            print(album_dict["filename"][i], album_dict["creationTime"][i], album_dict["mimeType"][i],
-                  album_dict["width"][i], album_dict["height"][i])
+        # List photos for debug
+        logging.debug("{:<20} {:<25} {:<15} {:<10} {:<10}".format("Filename", "Creation Time", "MIME Type", "Width", "Height"))
+        for item in album_dict["items"]:
+            logging.debug("{:<20} {:<25} {:<15} {:<10} {:<10}".format(item["filename"], item["creationTime"],
+                                                             item["mimeType"], item["width"], item["height"]))
 
-    return album_dict
+        return album_dict
+
+
 

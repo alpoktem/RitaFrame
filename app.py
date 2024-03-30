@@ -1,83 +1,100 @@
-from flask import Flask, render_template
-from photosapi import GooglePhotosApi, get_album_dict
-import RPi.GPIO as GPIO
-import threading, time, subprocess, os
-# import uvicorn
+from flask import Flask, render_template, session, jsonify
+from photosapi import GooglePhotosApi
+from motionio import MotionDetector
+import threading, os
+import config
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Configure logging
+os.makedirs('logs', exist_ok=True)
+log_file = 'logs/app.log'
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s [%(levelname)s] %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    handlers=[RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=5)])
 
 app = Flask(__name__)
-# socketio = SocketIO(app)
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
 
-#initialize gpio connection
-GPIO.setmode(GPIO.BCM)
-pir_pin = 17 #TODO: get this from a config file
-GPIO.setup(pir_pin, GPIO.IN)
+# Default to debug mode if no environment variable is set
+DEBUG_MODE = os.getenv('DEBUG_MODE', 'True') == 'True'
+
+ALBUM_NAME = config.ALBUM_NAME
+FRAME_LONG_EDGE = config.FRAME_LONG_EDGE
+FRAME_SHORT_EDGE = config.FRAME_SHORT_EDGE
+SLEEP_ON_SECS = config.SLEEP_ON_SECS
+CLIENT_SECRET_PATH = config.CLIENT_SECRET_PATH
+RUN_MOTION_DETECTION = config.RUN_MOTION_DETECTION
+PIR_PIN = config.PIR_PIN
+TRANSITION_TIME_MS = config.TRANSITION_TIME_MS
+DISPLAY_DURATION_MS = config.DISPLAY_DURATION_MS
 
 # initialize photos api and create service
-google_photos_api = GooglePhotosApi()
-creds = google_photos_api.run_local_server()
+google_photos_api = GooglePhotosApi(client_secret_file=CLIENT_SECRET_PATH)
 
-#TODO: get these from a config file
-ALBUM_NAME = "RitaFrame"
-FRAME_LONG_EDGE = "800"
-FRAME_SHORT_EDGE = "480"
 
-show_photo_no = 0 
+def get_next_image_url():
+    try:
+        session['display_photo_no'] = session.get('display_photo_no', 0)
+        items_list_dict = google_photos_api.get_album_dict(ALBUM_NAME)
 
-def motion_detection_thread():
-    while True:
-        motion_detected = GPIO.input(pir_pin)
-        if motion_detected:
-            print("Motion detected!", end=' ')
-            try:
-                env = os.environ.copy()
-                env['DISPLAY'] = ":0"
-                subprocess.run(["xset", "dpms", "force", "on"], env=env, check=True)
-                print("Screen waking up...")
-            except subprocess.CalledProcessError as e:
-                print("Error waking up screen:", e)
-        # else:
-        #     print("No motion")
-        time.sleep(1)  # Adjust the sleep duration as needed
+        if not items_list_dict or not items_list_dict["items"]:
+            raise Exception("No items found in the album.")
+
+        if session['display_photo_no'] >= len(items_list_dict["items"]):
+            session['display_photo_no'] = 0
+
+        
+        item = items_list_dict["items"][session['display_photo_no']]
+        photo_url = item["baseUrl"]
+
+        is_horizontal = int(item["width"]) > int(item["height"])
+        resolution = f"=w{FRAME_LONG_EDGE}-h{FRAME_SHORT_EDGE}" if is_horizontal else f"=h{FRAME_LONG_EDGE}-w{FRAME_SHORT_EDGE}"
+        complete_url = photo_url + resolution
+
+        logging.info(f"DISPLAY: {session['display_photo_no']} {item['filename']} {item['width']}x{item['height']} {'horizontal' if is_horizontal else 'vertical'}")
+
+        session['display_photo_no'] += 1
+        session.modified = True  # Ensure session is marked as modified
+        return complete_url
+    except Exception as e:
+        # Log the error and provide a fallback or error message
+        logging.error(f"Failed to fetch the next image URL: {e}")
+        # Optionally, return None or a default image URL
+        return None
 
 @app.route('/')
 def index():
-    global show_photo_no
-    # Fetch photos from Google Photos album
-    items_list_dict = get_album_dict(ALBUM_NAME, creds)
+    photo_url = get_next_image_url()
+    return render_template('index.html', 
+                           photo=photo_url if photo_url else "",
+                           transition_time_ms=TRANSITION_TIME_MS,
+                           display_duration_ms=DISPLAY_DURATION_MS)
 
-    if show_photo_no >= len(items_list_dict["filename"]):
-        show_photo_no = 0
-
-    if items_list_dict["filename"]:
-        photo_url = items_list_dict["baseUrl"][show_photo_no]
-
-        is_horizontal = int(items_list_dict["width"][show_photo_no]) > int(items_list_dict["height"][show_photo_no])
-        print("SHOW:", show_photo_no, items_list_dict["filename"][show_photo_no],
-              items_list_dict["width"][show_photo_no], 'x', items_list_dict["height"][show_photo_no],
-              "horizontal" if is_horizontal else "vertical")
-
-        resolution = f"=w{FRAME_LONG_EDGE}-h{FRAME_SHORT_EDGE}" if is_horizontal else f"=h{FRAME_LONG_EDGE}-w{FRAME_SHORT_EDGE}"
-
-        complete_url = photo_url + resolution
-
-        show_photo_no += 1
+@app.route('/next-image')
+def next_image():
+    image_url = get_next_image_url()
+    if image_url:
+        return jsonify(imageUrl=image_url)
     else:
-        complete_url = None
-
-    # Render the HTML template and pass the photo URL to it
-    return render_template('index.html', photo=complete_url)
+        return jsonify(error="No images available"), 404
 
 if __name__ == '__main__':
-    # app.run(port=8000, debug=True)
-    # socketio.run(app, port=8000, debug=True)
 
-    motion_status = "No motion"  # Initialize motion status
-    # Start the motion detection thread
-    motion_thread = threading.Thread(target=motion_detection_thread)
-    motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
-    motion_thread.start()
 
-    app.run(port=8000, debug=True)
-    # uvicorn.run(app, host='0.0.0.0', port=8000)
+    if RUN_MOTION_DETECTION:
+        pir_pin = config.PIR_PIN  # Make sure this is defined in your config
+        sleep_on_secs = config.SLEEP_ON_SECS  # Also defined in your config
+        motion_detector = MotionDetector(pir_pin, sleep_on_secs)
+
+        # Start the motion detection thread
+        motion_thread = threading.Thread(target=motion_detector.detect_motion)
+        motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
+        motion_thread.start()
+        logging.info("Motion detection thread started.")
+        logging.info("Sleep in secs: %i"%SLEEP_ON_SECS)
+
+    app.run(port=8000, debug=DEBUG_MODE)
 
 
