@@ -46,6 +46,9 @@ DISPLAY_DURATION_MS = config.DISPLAY_DURATION_MS
 # initialize photos api and create service
 google_photos_api = GooglePhotosApi(client_secret_file=CLIENT_SECRET_PATH)
 
+# initialize motion detector
+motion_detector = MotionDetector(PIR_PIN, SLEEP_ON_SECS)
+
 
 def get_next_image_url():
     try:
@@ -87,21 +90,21 @@ def index():
 
 @app.route('/next-image')
 def next_image():
-    image_url = get_next_image_url()
-    if image_url:
-        return jsonify(imageUrl=image_url)
+    if motion_detector.is_screen_on():
+        image_url = get_next_image_url()
+        if image_url:
+            return jsonify(imageUrl=image_url)
+        else:
+            return jsonify(error="No images available"), 404
     else:
-        return jsonify(error="No images available"), 404
+        # Screen is off, return a specific message or status
+        return jsonify(status="screen_off", message="Screen is off, pausing image updates."), 200
 
 if __name__ == '__main__':
 
-
     if RUN_MOTION_DETECTION:
-        pir_pin = config.PIR_PIN  # Make sure this is defined in your config
-        sleep_on_secs = config.SLEEP_ON_SECS  # Also defined in your config
-        motion_detector = MotionDetector(pir_pin, sleep_on_secs)
-
         # Start the motion detection thread
+        motion_detector.initialize()
         motion_thread = threading.Thread(target=motion_detector.detect_motion)
         motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
         motion_thread.start()
