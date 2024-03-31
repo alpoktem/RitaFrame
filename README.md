@@ -88,3 +88,7 @@ I got inspired and built on top of the work below:
 - [samuelclay/Raspberry-Pi-Photo-Frame](https://github.com/samuelclay/Raspberry-Pi-Photo-Frame)
 - [polzerdo55862/google-photos-api](https://github.com/polzerdo55862/google-photos-api)
 - [Google Photos Library API](https://developers.google.com/photos/library/reference/rest)
+
+## If you like this project
+
+<a href="https://www.buymeacoffee.com/alpoktem" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
