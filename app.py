@@ -6,19 +6,32 @@ import config
 import logging
 from logging.handlers import RotatingFileHandler
 
-# Configure logging
+# Default to debug mode if no environment variable is set
+DEBUG_MODE = os.getenv('DEBUG_MODE', 'True') == 'True'
+
+# Create log directory
 os.makedirs('logs', exist_ok=True)
-log_file = 'logs/app.log'
-logging.basicConfig(level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s] %(message)s',
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    handlers=[RotatingFileHandler(log_file, maxBytes=1024*1024*5, backupCount=5)])
+
+# Create a logger object
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)  # Set the logging level
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
+
+# Create a file handler for writing logs to a file
+file_handler = RotatingFileHandler('logs/app.log', maxBytes=1024*1024*5, backupCount=5)
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
+
+# Create a stream handler for writing logs to console on debug mode
+if DEBUG_MODE:
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
-
-# Default to debug mode if no environment variable is set
-DEBUG_MODE = os.getenv('DEBUG_MODE', 'True') == 'True'
 
 ALBUM_NAME = config.ALBUM_NAME
 FRAME_LONG_EDGE = config.FRAME_LONG_EDGE
