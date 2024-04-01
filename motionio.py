@@ -47,13 +47,7 @@ class MotionDetector:
         env = os.environ.copy()
         env['DISPLAY'] = ":0"
         try:
-            # subprocess.run(["xset", "dpms", "force", "on"], env=env, check=True)
-            result = subprocess.run(["xset", "dpms", "force", "off"], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, text=True)
-            # If the command was successful, there might still be useful output to log
-            if result.stdout:
-                logging.info("Output from xset: %s", result.stdout)
-            if result.stderr:
-                logging.error("Error output from xset: %s", result.stderr)
+            subprocess.run(["xset", "dpms", "force", "off"], env=env, check=True)
             self.screen_on = False
             logging.info("Screen turning off...")
         except subprocess.CalledProcessError as e:

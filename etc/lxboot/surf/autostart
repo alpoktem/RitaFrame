@@ -3,5 +3,5 @@
 @lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
 #@xscreensaver -no-splash
 point-rpi
-@midori -e Fullscreen -a http://127.0.0.1:8000
-
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/surffull.sh

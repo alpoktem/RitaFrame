@@ -73,25 +73,28 @@ PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to conn
 To have your Raspberry Pi photo frame application start automatically on boot, copy the file `etc/autostart` to `.config/lxsession/LXDE-pi`:
 
 ```bash
-sudo cp etc/autostart_chromium /home/pi/.config/lxsession/LXDE-pi/autostart
+sudo cp etc/lxboot/chromium/autostart /home/pi/.config/lxsession/LXDE-pi
    ```
 
 Now, when Raspberry Pi boots up, it will open up Chromium browser on kiosk-mode showing the Flask web app.
 
 ## Raspberry Pi Zero setup
 
-If you want to run RitaFrame on a lower-spec RaspberryPi like Zero, instead of Chromium you can use Midori. To install Midori:
+I wanted to run this on a Zero but it turned out that it's not able to support Chromium. Looking for a lightweight browser alternative, I found [surf](https://surf.suckless.org/). 
+
+To install:
 
 ```bash
 sudo apt-get update
-sudo apt-get install midori
+sudo apt-get install surf
 ```
 
-Now, to make your system boot up with Midori directed at the app page, use the Midori autostart script in `etc`:
+Surf unfortunately doesn't have a kiosk mode like Chromium. But you can put it to full screen using the F11 key. There are two additional files under `etc/surf` to make it boot up smoothly, first running surf once the web app is ready and then putting it on full screen. The autostart script to automate all this can be installed with the command:
+
 
 ```bash
-sudo cp etc/autostart_midori /home/pi/.config/lxsession/LXDE-pi/autostart
-   ```
+sudo cp etc/lxboot/surf/autostart /home/pi/.config/lxsession/LXDE-pi/autostart
+```
 
 ## References
 I got inspired and built on top of the work below:
