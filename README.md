@@ -70,10 +70,10 @@ PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to conn
 
 ## Autostart Setup
 
-To have your Raspberry Pi photo frame application start automatically on boot, copy the file `etc/autostart` to `.config/lxsession/LXDE-pi`:
+To have your Raspberry Pi photo frame application start automatically on boot, copy the `autostart` file to `~/.config/lxsession/LXDE-pi`:
 
 ```bash
-sudo cp etc/lxboot/chromium/autostart /home/pi/.config/lxsession/LXDE-pi
+sudo cp etc/lxboot/chromium/autostart ~/.config/lxsession/LXDE-pi
    ```
 
 Now, when Raspberry Pi boots up, it will open up Chromium browser on kiosk-mode showing the Flask web app.
@@ -93,7 +93,7 @@ Surf unfortunately doesn't have a kiosk mode like Chromium. But you can put it t
 
 
 ```bash
-sudo cp etc/lxboot/surf/autostart /home/pi/.config/lxsession/LXDE-pi/autostart
+sudo cp etc/lxboot/surf/autostart ~/.config/lxsession/LXDE-pi/autostart
 ```
 
 ## References
@@ -105,4 +105,4 @@ I got inspired and built on top of the work below:
 
 ## If you like this project
 
-<a href="https://www.buymeacoffee.com/alpoktem" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
+<a href="https://www.buymeacoffee.com/alpoktem" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="60" width="220"></a>
