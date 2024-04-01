@@ -1,4 +1,4 @@
-sleep 20
+sleep 30
 
 export DISPLAY=":0"
 
