@@ -18,7 +18,7 @@ I created this during my paternity leave so that my parents who live abroad can 
 
 ### PIR motion sensor setup
 
-PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to connect GND to a ground pin (e.g. 2), VIN to a power pin (e.g. 6) and OUT to a GPIO pin (e.g. 11, which is GPIO 17). For further information on GPIO pins [check here](https://randomnerdtutorials.com/raspberry-pi-pinout-gpios/).
+PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to connect GND to a ground pin (e.g. 6), VIN to a power pin (e.g. 2) and OUT to a GPIO pin (e.g. 11, which is GPIO 17). For further information on GPIO pins [check here](https://randomnerdtutorials.com/raspberry-pi-pinout-gpios/).
 
 ## Software Setup
 
