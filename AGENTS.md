@@ -138,10 +138,11 @@ Not started. In rough order of intent:
 
 - **Flip the frame 180°** so the cable input sits at the bottom. `ROTATION=inverted` in
   `etc/rotate-display.sh`, then confirm with `xrandr | head -2`.
-- **Investigate the light sensor.** There is *no* light-sensor code in this project and none
-  is configured, so any sensor fitted is currently doing nothing. Treat the wiring and part
-  type as unknown — establish those before writing any driver code. Likely goal is dimming the
-  screen at night.
+- **Investigate the light sensor.** `motionio.py` already sleeps and wakes the screen with
+  `xset dpms`, but that is driven only by the PIR motion sensor — nothing reads ambient
+  light and no light-sensor driver exists. An I2C scan of the Pi's bus found no responding
+  device, so treat the wiring and part type as unknown and establish those before writing
+  any driver code. Likely goal is dimming the screen at night.
 - **New visual design**, built on a laptop first, involving images and animation. Design for
   800x480 landscape and keep the animation cheap enough for a Zero. Splitting the inline CSS/JS
   in `templates/` into `static/` is likely part of this.

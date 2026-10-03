@@ -260,9 +260,15 @@ power pin (e.g. 2) and OUT to a GPIO pin (e.g. 11, which is GPIO 17). See the
 
 ### Light sensor
 
-**Not implemented.** There is no light-sensor code in this project and none is configured, so
-if a sensor is wired up it is currently doing nothing. Treat it as unverified hardware: the
-wiring, the part type, and the reading are all unknown. See the planned work below.
+**Not implemented.** `motionio.py` does control the screen — it sleeps and wakes the display
+with `xset dpms` — but it is driven purely by the PIR motion sensor. Nothing anywhere reads
+ambient light, and no light-sensor driver exists.
+
+So if a light sensor is wired up, it is currently doing nothing. Treat the hardware as
+unverified: the part type and the wiring are both unknown, and an I2C scan of the Pi's bus
+found no device responding, so nothing is currently detected on I2C. Establish what part is
+fitted and how it is wired before writing any driver code. Likely goal is dimming the screen
+at night. See the planned work below.
 
 ## Planned work
 
