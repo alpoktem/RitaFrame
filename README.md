@@ -16,6 +16,9 @@ python3 app.py
 
 Then open [localhost:8000](http://localhost:8000).
 
+Google Photos support is optional and lazy; if you turn it on, also install
+`pip3 install -r requirements-photos.txt`.
+
 `config.yaml` is reloaded automatically when you edit it — services are rebuilt to match,
 so changes take effect on the next page load with no restart.
 
@@ -59,6 +62,38 @@ templates/         clock.html, photos.html
 
 `app.py` only wires things together — data fetching lives in the service modules and markup
 lives in `views.py`, so adding a view never means touching the routes or the app setup.
+
+## Running on the Raspberry Pi
+
+The kiosk boots into LXDE, which runs the app and the browser from
+`~/.config/lxsession/LXDE-pi/autostart`:
+
+```
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
+point-rpi
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/surffull.sh
+```
+
+Two details matter here:
+
+- **`run.sh` checks its dependencies first.** A missing module used to make the app exit
+  silently while the browser sat on "Connection refused". It now names the missing module and
+  prints the install command, and stays in the terminal so you can read it.
+- **`runsurf.sh` waits for the server to answer** instead of sleeping a fixed 10s, then opens
+  the browser. `surf` does not retry, so if it launches too early the frame is stuck on a
+  connection error for the whole session.
+
+After pulling new code on the Pi:
+
+```bash
+cd ~/Documents/RitaFrame
+python3 -m pip install --user -r requirements.txt
+./run.sh
+```
+
+To have the app come back by itself if it ever dies, run it under a supervisor rather than
+bare `python3 app.py`.
 
 ## Configuration
 

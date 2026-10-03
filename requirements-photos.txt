@@ -1,0 +1,6 @@
+# Optional: only needed for Google Photos (enable_photos: true).
+# photosapi.py is imported lazily, so the dashboard runs without these.
+-r requirements.txt
+google-auth
+google-auth-oauthlib
+google-api-python-client
