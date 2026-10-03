@@ -3,9 +3,12 @@
 
 A dashboard for a home screen: clock, weather, and the bus timetable for the school run.
 
-Originally built as a cloud-based photo frame for a Raspberry Pi, pulling images from a
-Google Photos album with optional PIR motion detection. That carousel still exists but is
-now off by default, so you can run the dashboard on its own.
+It runs on a Raspberry Pi Zero as a kiosk — LXDE boots straight into a fullscreen browser
+pointed at a local Flask app, with no desktop or panel in the way. A Google Photos carousel
+also exists but is off by default, so the dashboard runs entirely on its own.
+
+The screen is **800x480 landscape** and the app takes roughly **70 seconds from power-on to
+serving** on the Pi, so anything that waits for it needs a generous timeout.
 
 ## Running it
 
@@ -58,10 +61,22 @@ photos.py          Google Photos (lazy, background thread)
 photosapi.py       Google Photos API wrapper + OAuth token handling
 motionio.py        PIR motion detection (lazy RPi.GPIO import)
 templates/         clock.html, photos.html
+etc/rotate-display.sh      forces landscape, optional ROTATION= flip
+etc/surf/runsurf.sh        waits for the server, opens the browser
+etc/surf/surffull.sh       fullscreen + clears the window stacking
+etc/lxboot/surf/autostart  LXDE session autostart (surf variant)
+etc/lxboot/chromium/autostart  LXDE session autostart (chromium variant)
+etc/ritaframe-display.desktop  XDG autostart entry for the rotation
 ```
 
 `app.py` only wires things together — data fetching lives in the service modules and markup
 lives in `views.py`, so adding a view never means touching the routes or the app setup.
+
+`templates/*.html` currently hold their own CSS and JS inline, which keeps each view readable
+in one file. That is worth splitting into `static/` once the design work starts.
+
+If you are an AI agent picking this up, read [`AGENTS.md`](AGENTS.md) first — it records the
+Pi-specific traps that are expensive to rediscover.
 
 ## Running on the Raspberry Pi
 
@@ -208,41 +223,81 @@ safe to enable at any time:
 Off by default. `motionio.py` imports `RPi.GPIO` lazily, so the app runs fine on a
 non-Pi machine with `run_motion_detection: false`.
 
-## Hardware Setup (Raspberry Pi photo frame mode)
+## Hardware
 
-- Raspberry Pi (any model with network connectivity)
-- MicroSD card (8 GB or more recommended) with Raspberry Pi OS
-- Power supply for the Raspberry Pi
-- HDMI-compatible display monitor
-- PIR motion sensor
-- Jumper wires (for connecting the PIR sensor to the Raspberry Pi)
+- Raspberry Pi Zero (surf is used because Chromium is too heavy for it)
+- MicroSD card, 8 GB or more
+- HDMI display, **800x480 landscape** (the panel is physically landscape; see rotation below)
+- Optional PIR motion sensor on GPIO 17 (physical pin 11)
+- Jumper wires
 
-### PIR motion sensor setup
+### Screen rotation
 
-PIR sensors come with three pins: GND, OUT and VIN. Use the jumper wires to connect GND to a ground pin (e.g. 6), VIN to a power pin (e.g. 2) and OUT to a GPIO pin (e.g. 11, which is GPIO 17). For further information on GPIO pins [check here](https://randomnerdtutorials.com/raspberry-pi-pinout-gpios/).
+The Pi's HDMI output boots **rotated 90 degrees (480x800 portrait)** even though the panel is
+physically landscape, so everything starts sideways. `etc/rotate-display.sh` corrects this on
+every boot and picks the landscape mode automatically.
 
-## Autostart Setup
-
-To have the app start automatically on boot, copy the `autostart` file to `~/.config/lxsession/LXDE-pi`:
+To flip the frame upside down — for example so the cable input ends up at the bottom — set
+`ROTATION=inverted`:
 
 ```bash
-sudo cp etc/lxboot/chromium/autostart ~/.config/lxsession/LXDE-pi
+ROTATION=inverted ~/Documents/RitaFrame/etc/rotate-display.sh
 ```
 
-## Raspberry Pi Zero setup
+To make that stick across reboots, edit `ROTATION=` near the top of
+`etc/rotate-display.sh`. Valid values are the `xrandr` rotations: `normal`, `left`, `right`,
+`inverted`. Confirm the result with `xrandr | head -2` — you want to see `800x480` and the
+rotation you chose.
 
-Chromium is too heavy for a Zero. Install [surf](https://surf.suckless.org/) instead:
+### PIR motion sensor
+
+Off by default (`run_motion_detection: false`). `motionio.py` imports `RPi.GPIO` lazily, so
+the app runs fine without it.
+
+PIR sensors have three pins: GND, OUT and VIN. Connect GND to a ground pin (e.g. 6), VIN to a
+power pin (e.g. 2) and OUT to a GPIO pin (e.g. 11, which is GPIO 17). See the
+[GPIO pinout](https://randomnerdtutorials.com/raspberry-pi-pinout-gpios/).
+
+### Light sensor
+
+**Not implemented.** There is no light-sensor code in this project and none is configured, so
+if a sensor is wired up it is currently doing nothing. Treat it as unverified hardware: the
+wiring, the part type, and the reading are all unknown. See the planned work below.
+
+## Planned work
+
+Rough order of intent, not yet started:
+
+- **Flip the frame 180°** so the cable input sits at the bottom. Set `ROTATION=inverted` as
+  described above.
+- **Investigate the light sensor.** Nothing reads it today, so first establish what part is
+  fitted and how it is wired (I2C vs GPIO vs analog), then decide whether it should dim the
+  screen at night.
+- **New visual design**, developed on a laptop first rather than on the Pi. It involves images
+  and animation, so it wants fast iteration and a real browser; the Pi is only the deployment
+  target. Plan for the animation to respect the frame's 800x480 landscape and to avoid
+  anything that would tax a Zero.
+
+## Autostart setup
+
+Copy the autostart file into the LXDE session directory:
+
+```bash
+sudo cp etc/lxboot/surf/autostart ~/.config/lxsession/LXDE-pi/autostart
+```
+
+For the screen rotation to survive reboots, also install the desktop entry:
+
+```bash
+mkdir -p ~/.config/autostart
+cp etc/ritaframe-display.desktop ~/.config/autostart/
+```
+
+Surf is used because Chromium is too heavy for a Zero:
 
 ```bash
 sudo apt-get update
 sudo apt-get install surf
-```
-
-Surf has no kiosk mode, so the scripts under `etc/surf` boot it once the web app is
-ready and then put it full screen:
-
-```bash
-sudo cp etc/lxboot/surf/autostart ~/.config/lxsession/LXDE-pi/autostart
 ```
 
 ## References

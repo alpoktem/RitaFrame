@@ -6,8 +6,18 @@
 # it to a landscape mode and re-applies it on every boot.
 #
 # Run from ~/.config/autostart, and again from runsurf.sh before the browser opens.
+#
+# To flip the frame upside down (cable input at the bottom) set ROTATION=inverted,
+# either here or in the environment when running this script. Valid values are the
+# xrandr rotations: normal, left, right, inverted.
 
 export DISPLAY="${DISPLAY:-:0}"
+ROTATION="${ROTATION:-normal}"
+
+case "$ROTATION" in
+    normal|left|right|inverted) ;;
+    *) echo "rotate-display: ROTATION must be normal|left|right|inverted (got '$ROTATION')"; exit 1 ;;
+esac
 
 # Give X a moment to create the output on a cold boot.
 for _ in $(seq 1 20); do
@@ -40,5 +50,5 @@ if [ -z "$MODE" ]; then
     exit 1
 fi
 
-xrandr --output "$OUTPUT" --mode "$MODE" --rotate normal && \
-    echo "rotate-display: $OUTPUT set to $MODE, rotation normal"
+xrandr --output "$OUTPUT" --mode "$MODE" --rotate "$ROTATION" && \
+    echo "rotate-display: $OUTPUT set to $MODE, rotation $ROTATION"

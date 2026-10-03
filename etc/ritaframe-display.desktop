@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=RitaFrame display setup
+Comment=Force the frame to landscape before the browser opens
+Exec=/home/pi/Documents/RitaFrame/etc/rotate-display.sh
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true
