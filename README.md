@@ -69,20 +69,44 @@ The kiosk boots into LXDE, which runs the app and the browser from
 `~/.config/lxsession/LXDE-pi/autostart`:
 
 ```
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
 point-rpi
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/surffull.sh
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
+@/home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
+@/home/pi/Documents/RitaFrame/etc/surf/surffull.sh
 ```
 
-Two details matter here:
+plus `~/.config/autostart/ritaframe-display.desktop`, which calls
+`etc/rotate-display.sh`. The scripts and that autostart file are all in this repo,
+so the Pi setup is reproducible rather than hand-edited.
 
-- **`run.sh` checks its dependencies first.** A missing module used to make the app exit
-  silently while the browser sat on "Connection refused". It now names the missing module and
-  prints the install command, and stays in the terminal so you can read it.
-- **`runsurf.sh` waits for the server to answer** instead of sleeping a fixed 10s, then opens
-  the browser. `surf` does not retry, so if it launches too early the frame is stuck on a
-  connection error for the whole session.
+Four things there are load-bearing, each of which broke the frame in practice:
+
+- **The screen boots portrait.** The Pi's HDMI output comes up rotated 90 degrees
+  (480x800) even though the panel is physically landscape. `rotate-display.sh`
+  picks a landscape mode and sets `--rotate normal`, and `runsurf.sh` calls it
+  again before opening the browser so ordering cannot matter.
+- **`run.sh` checks its dependencies first.** A missing module used to make the app
+  exit silently while the browser sat on "Connection refused". It now names the
+  module and the install command, and holds the terminal open.
+- **`runsurf.sh` waits for the server to answer** rather than sleeping a fixed 10s,
+  and waits for the landscape mode first. `surf` never retries, so launching early
+  leaves the frame stuck on a connection error for the whole session.
+- **Fullscreen needs the window stacking cleared too.** Three separate bugs here:
+  `xdotool key --window` sends a *synthetic* event that surf ignores, so the key has
+  to go through XTEST to the activated window; F11 is a *toggle*, so firing it
+  blindly un-fullscreens an already-fullscreen window; and surf briefly has only a
+  10x10 helper window, so `surffull.sh` waits for a realistically sized one instead
+  of grabbing the largest. Finally, LXDE's panel and desktop stack *above* surf and
+  re-map themselves after login, so they are disabled in the autostart file rather
+  than hidden by script.
+
+Both waits default to 300s because the Pi can take ~70s from boot to serving; the
+original 90s budget expired just before the browser appeared.
+
+Cleanup in `surffull.sh` only runs *after* the browser is confirmed fullscreen. If
+the app fails to start there is no browser, so the `run.sh` terminal stays on screen
+showing the error — which is what you want to see. Output is also appended to
+`~/ritaframe.log`.
 
 After pulling new code on the Pi:
 
@@ -92,8 +116,8 @@ python3 -m pip install --user -r requirements.txt
 ./run.sh
 ```
 
-To have the app come back by itself if it ever dies, run it under a supervisor rather than
-bare `python3 app.py`.
+To have the app come back by itself if it ever dies, run it under a supervisor rather
+than bare `python3 app.py`.
 
 ## Configuration
 

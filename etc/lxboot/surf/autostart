@@ -1,7 +1,28 @@
-@lxpanel --profile LXDE-pi
-@pcmanfm --desktop --profile LXDE-pi
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
-#@xscreensaver -no-splash
+# LXDE session autostart for the RitaFrame kiosk.
+# Installed as ~/.config/lxsession/LXDE-pi/autostart
+#
+# The panel and desktop are disabled: they sit *above* the browser in the window
+# stacking, so leaving them running covers the frame even when surf is fullscreen.
+# They also re-map themselves shortly after login, which undoes any attempt to
+# hide them from a script. For a kiosk it is simpler not to start them at all.
+#
+# Comment them back in if you want a normal desktop to debug in.
+#@lxpanel --profile LXDE-pi
+#@pcmanfm --desktop --profile LXDE-pi
+
+# Rotate the panel to landscape before anything opens a window.
+# (rotate-display.sh also runs from ~/.config/autostart as a second safety net.)
 point-rpi
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
-@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/etc/surf/surffull.sh
+
+# The Flask app, in a terminal on purpose: if it cannot start, the dependency
+# error stays on screen instead of failing invisibly. surffull.sh hides this
+# window once the browser is up, and run.sh tees to ~/ritaframe.log.
+@lxterminal -e /bin/bash /home/pi/Documents/RitaFrame/run.sh
+
+#@xscreensaver -no-splash
+
+# These two run without a terminal. Launching them via @lxterminal leaves an
+# empty shell window parked on top of the fullscreen browser, which is exactly
+# what we are trying to avoid.
+@/home/pi/Documents/RitaFrame/etc/surf/runsurf.sh
+@/home/pi/Documents/RitaFrame/etc/surf/surffull.sh
