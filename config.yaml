@@ -58,6 +58,8 @@ transition_time_ms: 1000
 display_duration_ms: 10000
 
 # ---- Motion detection (Raspberry Pi only) ----
-run_motion_detection: false
+# PIR on BCM pin 17 (physical pin 11). The screen sleeps after sleep_on_secs with
+# no motion, and wakes on the next detection.
+run_motion_detection: true
 pir_pin: 17
 sleep_on_secs: 500
