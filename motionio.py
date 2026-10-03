@@ -9,6 +9,7 @@ class MotionDetector:
         self.screen_on = True
         self.secs_since_last_activity = 0
         self.enabled = False
+        self._stop = threading.Event()
 
     def initialize(self):
         # Imported lazily so this module stays importable on non-Pi machines.
@@ -18,9 +19,12 @@ class MotionDetector:
         self._gpio = GPIO
         self.enabled = True
 
+    def stop(self):
+        self._stop.set()
+
     def detect_motion(self):
         GPIO = self._gpio
-        while True:
+        while not self._stop.is_set():
             motion_detected = GPIO.input(self.pir_pin)
             if motion_detected and self.secs_since_last_activity > 5:
                 logging.info("Motion detected!")
@@ -36,6 +40,7 @@ class MotionDetector:
 
             time.sleep(1)  # Adjust the sleep duration as needed
             self.secs_since_last_activity += 1
+        logging.info('Motion detection thread exiting')
 
     def wake_screen(self):
         env = os.environ.copy()
@@ -93,23 +98,47 @@ class MotionController:
     def enabled(self):
         return bool(self.config.get('run_motion_detection', False))
 
+    @property
+    def running(self):
+        return self.detector is not None and self.detector.enabled
+
     def start(self):
-        if not self.enabled:
+        if not self.enabled or self.running:
             return
         try:
-            self.detector = MotionDetector(
+            detector = MotionDetector(
                 self.config.get('pir_pin', 17),
                 self.config.get('sleep_on_secs', 500),
             )
-            self.detector.initialize()
-            thread = threading.Thread(target=self.detector.detect_motion, daemon=True)
+            detector.initialize()
+            thread = threading.Thread(target=detector.detect_motion, daemon=True)
             thread.start()
-            logging.info('Motion detection thread started (sleep after %ss)',
+            self.detector = detector
+            logging.info('Motion detection thread started (BCM %s, sleep after %ss)',
+                         self.config.get('pir_pin'),
                          self.config.get('sleep_on_secs'))
         except Exception as e:
             self.error = str(e)
             self.detector = None
             logging.error('Motion detection unavailable: %s', e)
+
+    def stop(self):
+        if self.detector:
+            self.detector.stop()
+            self.detector = None
+
+    def sync(self):
+        """Reconcile against the current config.
+
+        `enabled` reads config live, so it can change without a restart, but the
+        detector thread can only be started once at boot. Without this, flipping
+        run_motion_detection made /api/status report True while nothing was
+        actually running.
+        """
+        if self.enabled:
+            self.start()
+        elif self.detector:
+            self.stop()
 
     def is_screen_on(self):
         if not self.detector:

@@ -48,6 +48,13 @@ def create_app(config_path='config.yaml', debug=None):
     app.extensions['motion'] = motion
 
     register_routes(app, config, services, motion)
+
+    @app.before_request
+    def _reconcile_motion():
+        # config.yaml is reloaded live, so motion settings can change without a
+        # restart. Cheap: sync() is a no-op once the thread state matches config.
+        motion.sync()
+
     logging.info('RitaFrame starting: view=%s port=%s', config.get('view', DEFAULT_VIEW),
                  config.get('port', 8000))
     return app
@@ -110,6 +117,9 @@ def register_routes(app, config, services, motion):
                 'photos': services.photos.enabled,
                 'photos_mode': services.photos.mode if services.photos.enabled else None,
                 'motion_detection': motion.enabled,
+                # Reported separately so a configured-but-not-running detector is
+                # visible rather than looking like a working one.
+                'motion_running': motion.running,
             },
             'bus': {'ok': bus_result.get('ok'), 'error': bus_result.get('error')}
                    if bus_result else None,
