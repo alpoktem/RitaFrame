@@ -1,6 +1,6 @@
-import RPi.GPIO as GPIO
 import time, subprocess, os
 import logging
+import threading
 
 class MotionDetector:
     def __init__(self, pir_pin, sleep_on_secs):
@@ -11,11 +11,15 @@ class MotionDetector:
         self.enabled = False
 
     def initialize(self):
+        # Imported lazily so this module stays importable on non-Pi machines.
+        import RPi.GPIO as GPIO
         GPIO.setmode(GPIO.BCM)
         GPIO.setup(self.pir_pin, GPIO.IN)
+        self._gpio = GPIO
         self.enabled = True
 
     def detect_motion(self):
+        GPIO = self._gpio
         while True:
             motion_detected = GPIO.input(self.pir_pin)
             if motion_detected and self.secs_since_last_activity > 5:
@@ -71,3 +75,47 @@ class MotionDetector:
         except subprocess.CalledProcessError as e:
             logging.error("Failed to check screen state: %s", e)
             return self.screen_on  
+
+
+class MotionController:
+    """Starts the PIR detector when configured, and degrades to a no-op otherwise.
+
+    Wrapping the detector keeps RPi.GPIO, xset and thread management out of the
+    request path, and gives callers a safe is_screen_on() on any machine.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.detector = None
+        self.error = None
+
+    @property
+    def enabled(self):
+        return bool(self.config.get('run_motion_detection', False))
+
+    def start(self):
+        if not self.enabled:
+            return
+        try:
+            self.detector = MotionDetector(
+                self.config.get('pir_pin', 17),
+                self.config.get('sleep_on_secs', 500),
+            )
+            self.detector.initialize()
+            thread = threading.Thread(target=self.detector.detect_motion, daemon=True)
+            thread.start()
+            logging.info('Motion detection thread started (sleep after %ss)',
+                         self.config.get('sleep_on_secs'))
+        except Exception as e:
+            self.error = str(e)
+            self.detector = None
+            logging.error('Motion detection unavailable: %s', e)
+
+    def is_screen_on(self):
+        if not self.detector:
+            return True
+        try:
+            return self.detector.is_screen_on()
+        except Exception as e:
+            logging.warning('Could not read screen state: %s', e)
+            return True

@@ -1,116 +1,129 @@
-from flask import Flask, render_template, session, jsonify
-from photosapi import GooglePhotosApi
-from motionio import MotionDetector
-import threading, os
-import config
 import logging
+import os
 from logging.handlers import RotatingFileHandler
 
-# Default to debug mode if no environment variable is set
-DEBUG_MODE = os.getenv('DEBUG_MODE', 'True') == 'True'
+from flask import Flask, jsonify
 
-# Create log directory
-os.makedirs('logs', exist_ok=True)
+from config_loader import ConfigLoader
+from motionio import MotionController
+from services import Services
+from views import DEFAULT_VIEW, VIEWS, base_context, render_view
 
-# Create a logger object
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)  # Set the logging level
-
-# Create formatter
-formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s', '%Y-%m-%d %H:%M:%S')
-
-# Create a file handler for writing logs to a file
-file_handler = RotatingFileHandler('logs/app.log', maxBytes=1024*1024*5, backupCount=5)
-file_handler.setFormatter(formatter)
-logger.addHandler(file_handler)
-
-# Create a stream handler for writing logs to console on debug mode
-if DEBUG_MODE:
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-
-app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
-
-ALBUM_NAME = config.ALBUM_NAME
-FRAME_LONG_EDGE = config.FRAME_LONG_EDGE
-FRAME_SHORT_EDGE = config.FRAME_SHORT_EDGE
-SLEEP_ON_SECS = config.SLEEP_ON_SECS
-CLIENT_SECRET_PATH = config.CLIENT_SECRET_PATH
-RUN_MOTION_DETECTION = config.RUN_MOTION_DETECTION
-PIR_PIN = config.PIR_PIN
-TRANSITION_TIME_MS = config.TRANSITION_TIME_MS
-DISPLAY_DURATION_MS = config.DISPLAY_DURATION_MS
-
-# initialize photos api and create service
-google_photos_api = GooglePhotosApi(client_secret_file=CLIENT_SECRET_PATH)
-
-# initialize motion detector
-motion_detector = MotionDetector(PIR_PIN, SLEEP_ON_SECS)
+SECRET_KEY_ENV = 'FLASK_SECRET_KEY'
 
 
-def get_next_image_url():
-    try:
-        session['display_photo_no'] = session.get('display_photo_no', 0)
-        items_list_dict = google_photos_api.get_album_dict(ALBUM_NAME)
+def setup_logging(debug):
+    os.makedirs('logs', exist_ok=True)
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
+                                  '%Y-%m-%d %H:%M:%S')
 
-        if not items_list_dict or not items_list_dict["items"]:
-            raise Exception("No items found in the album.")
+    file_handler = RotatingFileHandler('logs/app.log', maxBytes=1024 * 1024 * 5,
+                                       backupCount=5)
+    file_handler.setFormatter(formatter)
+    root.addHandler(file_handler)
 
-        if session['display_photo_no'] >= len(items_list_dict["items"]):
-            session['display_photo_no'] = 0
+    if debug:
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        root.addHandler(stream_handler)
 
-        
-        item = items_list_dict["items"][session['display_photo_no']]
-        photo_url = item["baseUrl"]
 
-        is_horizontal = int(item["width"]) > int(item["height"])
-        resolution = f"=w{FRAME_LONG_EDGE}-h{FRAME_SHORT_EDGE}" if is_horizontal else f"=h{FRAME_LONG_EDGE}-w{FRAME_SHORT_EDGE}"
-        complete_url = photo_url + resolution
+def create_app(config_path='config.yaml', debug=None):
+    if debug is None:
+        debug = os.getenv('DEBUG_MODE', 'True') == 'True'
+    setup_logging(debug)
 
-        logging.info(f"DISPLAY: {session['display_photo_no']} {item['filename']} {item['width']}x{item['height']} {'horizontal' if is_horizontal else 'vertical'}")
+    config = ConfigLoader(config_path)
+    app = Flask(__name__)
+    app.config['SECRET_KEY'] = os.getenv(SECRET_KEY_ENV) or 'supersecretkey'
 
-        session['display_photo_no'] += 1
-        session.modified = True  # Ensure session is marked as modified
-        return complete_url
-    except Exception as e:
-        # Log the error and provide a fallback or error message
-        logging.error(f"Failed to fetch the next image URL: {e}")
-        # Optionally, return None or a default image URL
-        return None
+    services = Services(config)
+    motion = MotionController(config)
+    motion.start()
 
-@app.route('/')
-def index():
-    photo_url = get_next_image_url()
-    return render_template('index.html', 
-                           photo=photo_url if photo_url else "",
-                           transition_time_ms=TRANSITION_TIME_MS,
-                           display_duration_ms=DISPLAY_DURATION_MS)
+    app.extensions['config'] = config
+    app.extensions['services'] = services
+    app.extensions['motion'] = motion
 
-@app.route('/next-image')
-def next_image():
-    if motion_detector.is_screen_on():
-        image_url = get_next_image_url()
-        if image_url:
-            return jsonify(imageUrl=image_url)
-        else:
-            return jsonify(error="No images available"), 404
-    else:
-        # Screen is off, return a specific message or status
-        return jsonify(status="screen_off", message="Screen is off, pausing image updates."), 200
+    register_routes(app, config, services, motion)
+    logging.info('RitaFrame starting: view=%s port=%s', config.get('view', DEFAULT_VIEW),
+                 config.get('port', 8000))
+    return app
+
+
+def register_routes(app, config, services, motion):
+    @app.route('/')
+    def index():
+        return render_view(config.get('view', DEFAULT_VIEW), config, services)
+
+    @app.route('/view/<name>')
+    def view_by_name(name):
+        return render_view(name, config, services)
+
+    @app.route('/api/clock')
+    def api_clock():
+        now = services.now()
+        return jsonify({
+            'time': now.strftime(config.get('clock_format', '%H:%M')),
+            'date': now.strftime(config.get('date_format', '%A, %d %B')),
+            'seconds': now.second,
+        })
+
+    @app.route('/api/weather')
+    def api_weather():
+        if not config.get('enable_weather', True):
+            return jsonify({'enabled': False})
+        return jsonify({'enabled': True, 'forecast': services.weather_forecast()})
+
+    @app.route('/api/bus')
+    def api_bus():
+        if not config.get('enable_bus', True):
+            return jsonify({'enabled': False})
+        return jsonify({'enabled': True, 'bus': services.bus.get_departures()})
+
+    @app.route('/api/photos/next')
+    def api_photos_next():
+        if not services.photos.enabled:
+            return jsonify({'enabled': False, 'url': None})
+        return jsonify({'enabled': True, 'url': services.photos.next_url(),
+                        'status': services.photos.status})
+
+    @app.route('/photos/auth')
+    def photos_auth():
+        """One-off Google OAuth login. Deliberately blocking: this is the setup step."""
+        result = services.photos.authenticate()
+        return jsonify(result), 200 if result.get('ok') else 400
+
+    @app.route('/api/status')
+    def api_status():
+        """Diagnostics for a headless frame: active view, feature flags, service health."""
+        bus_result = services.bus_departures() if config.get('enable_bus', True) else None
+        return jsonify({
+            'view': config.get('view', DEFAULT_VIEW),
+            'available_views': sorted(VIEWS),
+            'features': {
+                'clock': bool(config.get('enable_clock', True)),
+                'weather': bool(config.get('enable_weather', True)),
+                'bus': bool(config.get('enable_bus', True)),
+                'photos': services.photos.enabled,
+                'photos_mode': services.photos.mode if services.photos.enabled else None,
+                'motion_detection': motion.enabled,
+            },
+            'bus': {'ok': bus_result.get('ok'), 'error': bus_result.get('error')}
+                   if bus_result else None,
+            'photos': {'status': services.photos.status, 'error': services.photos.error,
+                       'has_photo': services.photos.current_url() is not None},
+            'render': base_context(config, services)['current_time'],
+        })
+
+
+app = create_app()
+
 
 if __name__ == '__main__':
-
-    if RUN_MOTION_DETECTION:
-        # Start the motion detection thread
-        motion_detector.initialize()
-        motion_thread = threading.Thread(target=motion_detector.detect_motion)
-        motion_thread.daemon = True  # Set the thread as daemon to automatically exit on program exit
-        motion_thread.start()
-        logging.info("Motion detection thread started.")
-        logging.info("Sleep in secs: %i"%SLEEP_ON_SECS)
-
-    app.run(port=8000, debug=DEBUG_MODE)
-
-
+    config = app.extensions['config']
+    app.run(host=config.get('host', '0.0.0.0'),
+            port=int(os.getenv('PORT', config.get('port', 8000))),
+            debug=os.getenv('DEBUG_MODE', 'True') == 'True')

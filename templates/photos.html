@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RitaFrame Photos</title>
+    <style>
+        html, body {
+            margin: 0;
+            height: 100%;
+            background-color: {{ background_color }};
+            overflow: hidden;
+            cursor: none;
+        }
+        #photo-wrapper {
+            opacity: 0; /* hidden initially to avoid a flash before the first image loads */
+            transition: opacity {{ transition_time_ms }}ms ease-in-out;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        img {
+            max-width: 100%;
+            max-height: 100%;
+            width: auto;
+            height: auto;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="photo-wrapper">
+        <img id="photo" src="{{ photo }}" alt="" loading="lazy">
+    </div>
+    <script>
+        const transitionTime = {{ transition_time_ms }};
+        const pollInterval = {{ display_duration_ms }};
+        const wrapper = document.getElementById('photo-wrapper');
+        const photo = document.getElementById('photo');
+        let shown = photo.getAttribute('src');
+
+        function show(url) {
+            if (!url || url === shown) return;
+            wrapper.style.opacity = 0;
+            setTimeout(() => {
+                photo.onload = () => { wrapper.style.opacity = 1; };
+                photo.src = url;
+                shown = url;
+            }, transitionTime);
+        }
+
+        // The server rotates the photo on a background thread; we just poll for changes.
+        function poll() {
+            fetch('/api/photos/next')
+                .then(response => response.json())
+                .then(data => show(data.url))
+                .catch(error => console.error('Could not load the next photo:', error));
+        }
+
+        photo.onload = () => { wrapper.style.opacity = 1; };
+        setInterval(poll, pollInterval);
+    </script>
+</body>
+</html>

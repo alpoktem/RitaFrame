@@ -1,0 +1,127 @@
+"""Long-lived service objects, rebuilt when config.yaml changes on disk.
+
+Services used to be constructed once at import time, which meant editing e.g.
+bus_stop_id appeared to have no effect until a restart. They are rebuilt here
+whenever the config file's mtime changes, so the whole app honours live edits.
+"""
+
+import logging
+import threading
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
+
+from bus import BusService
+from photos import PhotoService
+from weather import WeatherService
+
+
+class Services:
+    def __init__(self, config):
+        self._config = config
+        self._built_for = object()
+        self._lock = threading.RLock()
+        self._weather = None
+        self._bus = None
+        self._photos = None
+        self._timezone = ZoneInfo('UTC')
+
+    def _ensure(self):
+        version = self._config.version
+        if version == self._built_for and self._weather is not None:
+            return
+        with self._lock:
+            if version == self._built_for and self._weather is not None:
+                return
+            self._build()
+            self._built_for = version
+
+    def _build(self):
+        c = self._config
+        timezone = c.get('clock_timezone', 'Europe/Madrid')
+        self._timezone = ZoneInfo(timezone)
+        self._weather = WeatherService(
+            location=c.get('weather_location', 'Barcelona,ES'),
+            timezone=timezone,
+            api_key=c.get('weather_api_key'),
+            units=c.get('weather_units', 'metric'),
+            cache_ttl_secs=c.get('weather_cache_ttl_secs', 600),
+            provider=c.get('weather_provider', 'open-meteo'),
+        )
+        self._bus = BusService(
+            stop_id=c.get('bus_stop_id'),
+            line=c.get('bus_line'),
+            destination_filter=c.get('bus_destination_filter'),
+            credentials_path=c.get('bus_credentials_path', './credentials/tmb.json'),
+            timezone=timezone,
+            departures_to_show=c.get('bus_departures_to_show', 3),
+            cache_ttl_secs=c.get('bus_poll_interval_secs', 60),
+            expected_stop_name=c.get('bus_expected_stop_name'),
+        )
+        # Retire the previous photo thread so a config edit cannot leave two running.
+        if self._photos is not None:
+            self._photos.stop()
+        self._photos = PhotoService(c)
+        self._photos.start()
+        logging.info('Services built (timezone=%s)', timezone)
+
+    @property
+    def weather(self):
+        self._ensure()
+        return self._weather
+
+    @property
+    def bus(self):
+        self._ensure()
+        return self._bus
+
+    @property
+    def photos(self):
+        self._ensure()
+        return self._photos
+
+    @property
+    def timezone(self):
+        self._ensure()
+        return self._timezone
+
+    def now(self):
+        return datetime.now(self.timezone)
+
+    def weather_forecast(self):
+        """Forecast days shaped for display, honouring forecast_days/show_precipitation."""
+        forecast_days = int(self._config.get('forecast_days', 3))
+        show_precipitation = bool(self._config.get('show_precipitation', True))
+        today = self.now().date()
+
+        days = []
+        raw = self.weather.get_forecast()[:forecast_days]
+        for idx, day in enumerate(raw):
+            try:
+                day_date = date.fromisoformat(day['date'])
+            except (TypeError, ValueError):
+                day_date = today + timedelta(days=idx)
+
+            delta = (day_date - today).days
+            if delta <= 0:
+                label = 'Today'
+            elif delta == 1:
+                label = 'Tomorrow'
+            else:
+                label = day_date.strftime('%a')
+
+            days.append({
+                'label': label,
+                'date_label': day_date.strftime('%d %b'),
+                'temp_min': round(day['temp_min']),
+                'temp_max': round(day['temp_max']),
+                'description': day['description'],
+                'icon': day['icon'],
+                'precipitation_probability': day.get('precipitation_probability'),
+                'show_precipitation': show_precipitation,
+            })
+        return days
+
+    def bus_departures(self):
+        if not self._config.get('enable_bus', True):
+            return None
+        return self.bus.get_departures()

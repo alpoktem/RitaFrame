@@ -1,14 +1,7 @@
 #!/bin/bash
-cd /home/pi/Documents/RitaFrame
+cd "$(dirname "$0")" || exit 1
 
-# Disable screen blanking
-# export DISPLAY=":0"
-# xset s off
-# xset -dpms
-# xset s noblank
+# Set to False to quieten logging
+export DEBUG_MODE="${DEBUG_MODE:-False}"
 
-# Set the environment to production
-export DEBUG_MODE=False
-
-# Run the app
-python -u app.py
+python3 -u app.py

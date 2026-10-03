@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RitaFrame</title>
+    <style>
+        :root {
+            --bg: {{ background_color }};
+            --fg: {{ text_color }};
+            --muted: {{ muted_text_color }};
+            --bg-image: {% if background_image %}url("{{ background_image }}"){% else %}none{% endif %};
+        }
+
+        * { box-sizing: border-box; }
+
+        html, body {
+            margin: 0;
+            height: 100%;
+            background-color: var(--bg);
+            background-image: var(--bg-image);
+            background-size: cover;
+            background-position: center;
+            color: var(--fg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         "Helvetica Neue", Arial, sans-serif;
+            overflow: hidden;
+            cursor: none;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Only present when a photo backdrop is configured; keeps text readable. */
+        .backdrop { position: fixed; inset: 0; background: #000; opacity: {{ overlay_opacity }}; }
+
+        .frame {
+            position: relative;
+            height: 100%;
+            padding: 4vmin 5vmin;
+            display: grid;
+            grid-template-rows: auto 1fr auto;
+            gap: 3vmin;
+        }
+
+        .label {
+            font-size: 1.5vmin;
+            letter-spacing: 0.28em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 500;
+        }
+
+        /* ---- Clock ---- */
+        .clock { text-align: center; }
+        .clock .time {
+            font-size: 22vmin;
+            font-weight: 200;
+            line-height: 0.95;
+            letter-spacing: -0.02em;
+            font-variant-numeric: tabular-nums;
+        }
+        .clock .date {
+            margin-top: 1.5vmin;
+            font-size: 3.4vmin;
+            font-weight: 300;
+            color: var(--muted);
+        }
+
+        /* ---- Weather ---- */
+        .weather { align-self: start; }
+        .forecast {
+            margin-top: 2vmin;
+            display: grid;
+            gap: 1.6vmin;
+        }
+        .forecast-day {
+            display: grid;
+            grid-template-columns: 16vmin 5vmin 1fr auto;
+            align-items: center;
+            gap: 2vmin;
+            padding: 1.6vmin 2vmin;
+            border-radius: 1.6vmin;
+            background-color: rgba(255, 255, 255, 0.05);
+        }
+        .forecast-day .day {
+            font-size: 2.8vmin;
+            font-weight: 400;
+        }
+        .forecast-day .day small {
+            display: block;
+            font-size: 1.7vmin;
+            color: var(--muted);
+            font-weight: 300;
+        }
+        .forecast-day .glyph { font-size: 4vmin; line-height: 1; }
+        .forecast-day .desc {
+            font-size: 2.4vmin;
+            color: var(--muted);
+            font-weight: 300;
+        }
+        .forecast-day .rain {
+            font-size: 2vmin;
+            color: var(--muted);
+            font-weight: 300;
+        }
+        .forecast-day .temps {
+            font-size: 3.4vmin;
+            font-weight: 300;
+            font-variant-numeric: tabular-nums;
+        }
+        .forecast-day .temps .lo { color: var(--muted); }
+
+        /* ---- Bus ---- */
+        .bus { align-self: end; }
+        .departures {
+            margin-top: 1.6vmin;
+            display: grid;
+            grid-template-columns: repeat({{ bus_result.departures|length or 1 }}, 1fr);
+            gap: 1.6vmin;
+        }
+        .departure {
+            padding: 2vmin;
+            border-radius: 1.6vmin;
+            background-color: rgba(255, 255, 255, 0.05);
+            text-align: center;
+        }
+        .departure .time {
+            font-size: 6vmin;
+            font-weight: 300;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+        .departure .route {
+            margin-top: 1vmin;
+            font-size: 2.2vmin;
+            font-weight: 500;
+            color: var(--muted);
+        }
+        .departure .mins {
+            margin-top: 0.4vmin;
+            font-size: 2vmin;
+            color: var(--muted);
+            font-weight: 300;
+        }
+
+        .notices {
+            margin: 1.2vmin 0 0;
+            padding: 1.2vmin 1.6vmin 1.2vmin 3.4vmin;
+            list-style: disc;
+            border-radius: 1.2vmin;
+            background-color: rgba(255, 193, 7, 0.15);
+            color: #ffd54f;
+            font-size: 2vmin;
+            line-height: 1.4;
+        }
+        .bus-empty, .bus-error {
+            margin-top: 1.6vmin;
+            padding: 2vmin;
+            border-radius: 1.6vmin;
+            font-size: 2.4vmin;
+        }
+        .bus-empty {
+            background-color: rgba(255, 255, 255, 0.05);
+            color: var(--muted);
+        }
+        .bus-error {
+            background-color: rgba(244, 67, 54, 0.18);
+            color: #ff8a80;
+        }
+    </style>
+</head>
+<body>
+    {% if background_image %}<div class="backdrop"></div>{% endif %}
+    <main class="frame">
+        {% if enable_clock %}
+        <section class="clock">
+            <div class="time" id="time">{{ current_time }}</div>
+            <div class="date" id="date">{{ current_date }}</div>
+        </section>
+        {% else %}
+        <div></div>
+        {% endif %}
+
+        <section class="weather">
+            {% if enable_weather and weather_forecast %}
+            <div class="label">Weather &middot; {{ weather_location }}</div>
+            <div class="forecast">
+                {% for day in weather_forecast %}
+                <div class="forecast-day">
+                    <div class="day">{{ day.label }}<small>{{ day.date_label }}</small></div>
+                    <div class="glyph" data-icon="{{ day.icon }}"></div>
+                    <div>
+                        <div class="desc">{{ day.description }}</div>
+                        {% if day.show_precipitation and day.precipitation_probability is not none %}
+                        <div class="rain">{{ day.precipitation_probability }}% rain</div>
+                        {% endif %}
+                    </div>
+                    <div class="temps">{{ day.temp_max }}&deg;<span class="lo"> / {{ day.temp_min }}&deg;</span></div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </section>
+
+        {% if enable_bus and bus_result %}
+        <section class="bus">
+            <div class="label">{{ bus_stop_name }}</div>
+            {% if bus_result.notices %}
+            <ul class="notices">
+                {% for notice in bus_result.notices %}
+                <li>{{ notice }}</li>
+                {% endfor %}
+            </ul>
+            {% endif %}
+            {% if bus_result.ok and bus_result.departures %}
+            <div class="departures">
+                {% for bus in bus_result.departures %}
+                <div class="departure">
+                    <div class="time">{{ bus.time }}</div>
+                    <div class="route">{{ bus.line }} &rarr; {{ bus.destination }}</div>
+                    <div class="mins">in {{ bus.minutes }} min</div>
+                </div>
+                {% endfor %}
+            </div>
+            {% elif bus_result.ok %}
+            <div class="bus-empty">No more buses from this stop today</div>
+            {% else %}
+            <div class="bus-error">{{ bus_result.error }}</div>
+            {% endif %}
+        </section>
+        {% endif %}
+    </main>
+
+    <script>
+        // Render weather glyphs from the WMO codes assigned server-side.
+        const GLYPHS = {
+            '01': '\u2600\uFE0F', '02': '\u26C5', '03': '\u26C5', '04': '\u2601\uFE0F',
+            '09': '\u{1F327}\uFE0F', '10': '\u{1F327}\uFE0F', '11': '\u26C8',
+            '13': '\u{1F327}\uFE0F', '14': '\u{1F328}', '50': '\u{1F32B}\uFE0F'
+        };
+        document.querySelectorAll('.glyph').forEach(el => {
+            el.textContent = GLYPHS[el.dataset.icon] || '\u26C5';
+        });
+
+        // Tick the clock locally between server syncs so it never looks frozen.
+        // We derive a fixed offset (server - browser) once, then add elapsed time,
+        // so the display stays correct even if the browser's timezone differs.
+        const timeEl = document.getElementById('time');
+        const dateEl = document.getElementById('date');
+        let offsetMs = 0;
+
+        function computeOffset(serverTime) {
+            const [h, m] = serverTime.split(':').map(Number);
+            if (Number.isNaN(h) || Number.isNaN(m)) return;
+            const now = new Date();
+            const browserMins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
+            const serverMins = h * 60 + m;
+            offsetMs = (serverMins - browserMins) * 60000;
+        }
+
+        function tick() {
+            if (!timeEl) return;
+            const t = new Date(Date.now() + offsetMs);
+            const hh = String(t.getHours()).padStart(2, '0');
+            const mm = String(t.getMinutes()).padStart(2, '0');
+            timeEl.textContent = `${hh}:${mm}`;
+        }
+
+        function sync() {
+            fetch('/api/clock')
+                .then(r => r.json())
+                .then(d => {
+                    computeOffset(d.time);
+                    if (dateEl) dateEl.textContent = d.date;
+                    tick();
+                })
+                .catch(() => {});
+        }
+
+        computeOffset('{{ current_time }}');
+        tick();
+        setInterval(tick, 1000);
+        sync();
+        setInterval(sync, 600000);
+
+        // Bus times go stale quickly, so reload the page on the poll interval.
+        {% if enable_bus %}
+        setTimeout(() => window.location.reload(), {{ (refresh_secs|default(60, true)) * 1000 }});
+        {% endif %}
+    </script>
+</body>
+</html>

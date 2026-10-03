@@ -36,8 +36,25 @@ class GooglePhotosApi:
         self.client_secret_file = client_secret_file
         self.api_version = api_version
         self.scopes = scopes
-        self.cred_pickle_file = f'./credentials/token_{self.api_name}_{self.api_version}.pickle'
+        # Keep the cached token beside the client secret so it does not depend on
+        # the process working directory.
+        token_dir = os.path.dirname(os.path.abspath(client_secret_file))
+        self.cred_pickle_file = os.path.join(
+            token_dir, f'token_{self.api_name}_{self.api_version}.pickle')
         self.authenticate()
+
+    @classmethod
+    def stored_credentials_path(cls, client_secret_file,
+                               api_name='photoslibrary', api_version='v1'):
+        token_dir = os.path.dirname(os.path.abspath(client_secret_file))
+        return os.path.join(token_dir, f'token_{api_name}_{api_version}.pickle')
+
+    @classmethod
+    def has_stored_credentials(cls, client_secret_file,
+                               api_name='photoslibrary', api_version='v1'):
+        """True if a token is already cached, i.e. no interactive login is needed."""
+        return os.path.exists(cls.stored_credentials_path(client_secret_file,
+                                                          api_name, api_version))
 
     def authenticate(self):
         """
@@ -49,22 +66,31 @@ class GooglePhotosApi:
         Returns:
             The authenticated credentials.
         """
+        self.cred = None
 
         # is checking if there is already a pickle file with relevant credentials
         if os.path.exists(self.cred_pickle_file):
-            with open(self.cred_pickle_file, 'rb') as token:
-                self.cred = pickle.load(token)
+            try:
+                with open(self.cred_pickle_file, 'rb') as token:
+                    self.cred = pickle.load(token)
+            except Exception as e:
+                logging.warning(f"Failed to load credentials from pickle: {e}")
+                self.cred = None
 
         # if there is no pickle file with stored credentials, create one using google_auth_oauthlib.flow
-        if not self.cred or not self.cred.valid:
-            if self.cred and self.cred.expired and self.cred.refresh_token:
-                self.cred.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(self.client_secret_file, self.scopes)
-                self.cred = flow.run_local_server()
+        try:
+            if not self.cred or not getattr(self.cred, 'valid', False):
+                if self.cred and getattr(self.cred, 'expired', False) and getattr(self.cred, 'refresh_token', None):
+                    self.cred.refresh(Request())
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(self.client_secret_file, self.scopes)
+                    self.cred = flow.run_local_server()
 
-            with open(self.cred_pickle_file, 'wb') as token:
-                pickle.dump(self.cred, token)
+                with open(self.cred_pickle_file, 'wb') as token:
+                    pickle.dump(self.cred, token)
+        except Exception as e:
+            logging.error(f"Authentication failed: {e}")
+            raise
         
         return self.cred
 
