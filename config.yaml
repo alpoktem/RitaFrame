@@ -52,7 +52,7 @@ photos_rotation_secs: 3600
 photos_overlay_opacity: 0.45   # dim layer over a background photo, for legibility
 album_name: "RitaFrame"
 client_secret_path: "./credentials/client_secret.json"
-frame_long_edge: "800"
+frame_long_edge: "800"   # the Pi screen is 480x800 portrait: long edge is vertical
 frame_short_edge: "480"
 transition_time_ms: 1000
 display_duration_ms: 10000
