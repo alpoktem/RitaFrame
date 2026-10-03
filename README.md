@@ -120,8 +120,15 @@ original 90s budget expired just before the browser appeared.
 
 Cleanup in `surffull.sh` only runs *after* the browser is confirmed fullscreen. If
 the app fails to start there is no browser, so the `run.sh` terminal stays on screen
-showing the error — which is what you want to see. Output is also appended to
-`~/ritaframe.log`.
+showing the error — which is what you want to see.
+
+Logs land in two places: `~/ritaframe.log` (stdout, via `tee`) and `logs/app.log`
+(rotating). Both get the app's own messages, so you can watch for motion events over
+SSH:
+
+```bash
+tail -f ~/ritaframe.log | grep -i motion
+```
 
 After pulling new code on the Pi:
 
@@ -147,7 +154,7 @@ Everything lives in `config.yaml`, grouped by feature:
 | Weather | `enable_weather`, `weather_provider`, `weather_location`, `forecast_days`, `weather_cache_ttl_secs`, `show_precipitation` |
 | Bus | `enable_bus`, `bus_stop_id`, `bus_line`, `bus_destination_filter`, `bus_expected_stop_name`, `bus_poll_interval_secs`, `bus_departures_to_show` |
 | Photos | `enable_photos`, `photos_mode`, `photos_rotation_secs`, `photos_overlay_opacity`, `album_name` |
-| Motion | `run_motion_detection`, `pir_pin`, `sleep_on_secs` |
+| Motion | `run_motion_detection`, `pir_pin` (BCM), `sleep_on_secs` |
 
 ### Endpoints
 
@@ -220,8 +227,18 @@ safe to enable at any time:
 
 ### Motion detection (Raspberry Pi)
 
-Off by default. `motionio.py` imports `RPi.GPIO` lazily, so the app runs fine on a
-non-Pi machine with `run_motion_detection: false`.
+Controlled by `run_motion_detection` (BCM pin in `pir_pin`, default 17 = physical pin
+11). The screen sleeps after `sleep_on_secs` with no detected motion and wakes on the
+next detection.
+
+Because `config.yaml` is reloaded live, flipping the flag takes effect without a
+restart — `MotionController.sync()` reconciles the detector thread against the config on
+each request. `/api/status` reports `motion_detection` (configured) and `motion_running`
+(thread actually alive) separately, so a detector that failed to start is visible rather
+than looking healthy.
+
+`motionio.py` imports `RPi.GPIO` lazily, so the app still runs on a non-Pi machine, where
+it logs `Motion detection unavailable` and carries on.
 
 ## Hardware
 

@@ -15,16 +15,26 @@ SECRET_KEY_ENV = 'FLASK_SECRET_KEY'
 def setup_logging(debug):
     os.makedirs('logs', exist_ok=True)
     root = logging.getLogger()
-    root.setLevel(logging.INFO)
+    root.setLevel(logging.DEBUG if debug else logging.INFO)
     formatter = logging.Formatter('%(asctime)s [%(levelname)s] %(message)s',
                                   '%Y-%m-%d %H:%M:%S')
 
+    # create_app() also runs at import time, so this can be called more than once
+    # in a process. Without the guard, every call adds another handler and each
+    # log line gets duplicated.
+    existing = {(type(h).__name__, getattr(h, 'baseFilename', None)) for h in root.handlers}
+
     file_handler = RotatingFileHandler('logs/app.log', maxBytes=1024 * 1024 * 5,
                                        backupCount=5)
-    file_handler.setFormatter(formatter)
-    root.addHandler(file_handler)
+    if ('RotatingFileHandler', file_handler.baseFilename) not in existing:
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
 
-    if debug:
+    # Always log to stdout as well: run.sh tees it to ~/ritaframe.log, which is
+    # where you look when debugging a headless kiosk over SSH. Without this the
+    # app's own messages (motion detected, screen sleeping) only reached the
+    # rotating file and looked like they had never happened.
+    if ('StreamHandler', None) not in existing:
         stream_handler = logging.StreamHandler()
         stream_handler.setFormatter(formatter)
         root.addHandler(stream_handler)
