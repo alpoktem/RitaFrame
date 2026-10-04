@@ -58,13 +58,14 @@ transition_time_ms: 1000
 display_duration_ms: 10000
 
 # ---- Motion detection (Raspberry Pi only) ----
-# PIR on BCM pin 15 = physical header pin 10. Check with `pinout` before changing
-# it: physical 10 is GPIO15, while physical 11 is GPIO17, and mixing them up
-# reads a pin nothing is attached to.
+# AM312 mini PIR on BCM pin 15 = physical header pin 10. Check with `pinout`
+# before changing it: physical 10 is GPIO15, while physical 11 is GPIO17.
 #
-# The module's OUT drives a 5V logic level into a 3.3V GPIO. That is outside the
-# Pi's spec and is only survivable because it works; add a divider or level
-# shifter if the module ever misbehaves.
+# Powered from physical pin 17 (3.3V), not pin 2 (5V). The AM312 is rated
+# DC 2.7-12V, and its output is driven from Vin, so a 3.3V supply keeps OUT
+# within the GPIO's 3.3V range. Supplying 5V risks overdriving the pin: no Pi
+# GPIO is 5V tolerant, and the module's datasheet does not state an output
+# high level.
 run_motion_detection: true
 pir_pin: 15
 sleep_on_secs: 300

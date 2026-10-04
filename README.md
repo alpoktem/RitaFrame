@@ -227,15 +227,33 @@ safe to enable at any time:
 
 ### Motion detection (Raspberry Pi)
 
-Controlled by `run_motion_detection` (BCM pin in `pir_pin`, default 17 = physical pin
-11). The screen sleeps after `sleep_on_secs` with no detected motion and wakes on the
-next detection.
+Controlled by `run_motion_detection` (BCM pin in `pir_pin`, currently 15 = physical
+header pin 10). The screen sleeps after `sleep_on_secs` with no detected motion and wakes
+on the next detection.
 
-Because `config.yaml` is reloaded live, flipping the flag takes effect without a
-restart — `MotionController.sync()` reconciles the detector thread against the config on
-each request. `/api/status` reports `motion_detection` (configured) and `motion_running`
-(thread actually alive) separately, so a detector that failed to start is visible rather
-than looking healthy.
+Wiring, as built:
+
+| Signal | Header pin | Note |
+| --- | --- | --- |
+| `Vin` | 17 | 3.3V, not pin 2's 5V — see below |
+| `GND` | 6 | |
+| `OUT` | 10 | GPIO15 |
+
+The AM312 is rated DC 2.7-12V, so it runs happily from the 3.3V rail. That matters
+because the module's output is driven from `Vin`, and **no Pi GPIO is 5V tolerant**:
+powering it from pin 2 would put 5V on a 3.3V pin. Its datasheet states no output high
+level, so supplying the lowest in-spec voltage is the safe choice.
+
+Because `config.yaml` is reloaded live, changing `run_motion_detection`, `pir_pin` or
+`sleep_on_secs` takes effect without a restart — `MotionController.sync()` reconciles the
+detector thread on each request, restarting it when the pin or timeout differs.
+`/api/status` reports `motion_detection` (configured) and `motion_running` (thread
+actually alive) separately, so a detector that failed to start is visible rather than
+looking healthy.
+
+Waking is debounced over two consecutive HIGH samples. The sensor's 2-second blocking
+time means it emits some very short spikes, which a single-sample check would treat as
+motion.
 
 `motionio.py` imports `RPi.GPIO` lazily, so the app still runs on a non-Pi machine, where
 it logs `Motion detection unavailable` and carries on.
