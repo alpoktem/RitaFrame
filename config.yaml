@@ -67,5 +67,4 @@ display_duration_ms: 10000
 # shifter if the module ever misbehaves.
 run_motion_detection: true
 pir_pin: 15
-# Short while tuning the sensor; raise for unattended use.
-sleep_on_secs: 60
+sleep_on_secs: 300

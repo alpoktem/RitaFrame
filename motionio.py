@@ -125,21 +125,23 @@ class MotionController:
     def running(self):
         return self.detector is not None and self.detector.enabled
 
+    @property
+    def _settings(self):
+        return (self.config.get('pir_pin', 17),
+                self.config.get('sleep_on_secs', 500))
+
     def start(self):
         if not self.enabled or self.running:
             return
         try:
-            detector = MotionDetector(
-                self.config.get('pir_pin', 17),
-                self.config.get('sleep_on_secs', 500),
-            )
+            pir_pin, sleep_on_secs = self._settings
+            detector = MotionDetector(pir_pin, sleep_on_secs)
             detector.initialize()
             thread = threading.Thread(target=detector.detect_motion, daemon=True)
             thread.start()
             self.detector = detector
             logging.info('Motion detection thread started (BCM %s, sleep after %ss)',
-                         self.config.get('pir_pin'),
-                         self.config.get('sleep_on_secs'))
+                         pir_pin, sleep_on_secs)
         except Exception as e:
             self.error = str(e)
             self.detector = None
@@ -158,11 +160,23 @@ class MotionController:
         detector thread can only be started once at boot. Without this, flipping
         run_motion_detection made /api/status report True while nothing was
         actually running.
+
+        The detector also captures pir_pin and sleep_on_secs at construction, so
+        editing either would otherwise need a restart. Recreating the thread is
+        cheap and keeps the whole motion section live-reloadable, like the rest
+        of config.yaml.
         """
-        if self.enabled:
-            self.start()
-        elif self.detector:
-            self.stop()
+        if not self.enabled:
+            if self.detector:
+                self.stop()
+            return
+
+        if self.detector:
+            if self._settings != (self.detector.pir_pin, self.detector.sleep_on_secs):
+                logging.info('Motion settings changed, restarting detector')
+                self.stop()
+
+        self.start()
 
     def is_screen_on(self):
         if not self.detector:
