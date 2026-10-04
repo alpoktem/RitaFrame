@@ -58,8 +58,14 @@ transition_time_ms: 1000
 display_duration_ms: 10000
 
 # ---- Motion detection (Raspberry Pi only) ----
-# PIR on BCM pin 17 (physical pin 11). The screen sleeps after sleep_on_secs with
-# no motion, and wakes on the next detection.
+# PIR on BCM pin 15 = physical header pin 10. Check with `pinout` before changing
+# it: physical 10 is GPIO15, while physical 11 is GPIO17, and mixing them up
+# reads a pin nothing is attached to.
+#
+# The module's OUT drives a 5V logic level into a 3.3V GPIO. That is outside the
+# Pi's spec and is only survivable because it works; add a divider or level
+# shifter if the module ever misbehaves.
 run_motion_detection: true
-pir_pin: 17
-sleep_on_secs: 500
+pir_pin: 15
+# Short while tuning the sensor; raise for unattended use.
+sleep_on_secs: 60

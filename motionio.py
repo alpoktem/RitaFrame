@@ -3,9 +3,10 @@ import logging
 import threading
 
 class MotionDetector:
-    def __init__(self, pir_pin, sleep_on_secs):
+    def __init__(self, pir_pin, sleep_on_secs, wake_debounce_samples=2):
         self.pir_pin = pir_pin
         self.sleep_on_secs = sleep_on_secs
+        self.wake_debounce_samples = wake_debounce_samples
         self.screen_on = True
         self.secs_since_last_activity = 0
         self.enabled = False
@@ -22,18 +23,40 @@ class MotionDetector:
     def stop(self):
         self._stop.set()
 
+    def shutdown(self):
+        """Release the GPIO pin so nothing else in the process keeps it claimed.
+
+        RPi.GPIO leaves pins latched until cleanup, and a pin left held by this
+        process makes an unrelated diagnostic read look like a dead sensor.
+        """
+        gpio = getattr(self, '_gpio', None)
+        if gpio is None:
+            return
+        try:
+            gpio.cleanup(self.pir_pin)
+        except Exception as e:
+            logging.warning('GPIO cleanup failed on pin %s: %s', self.pir_pin, e)
+        self.enabled = False
+
     def detect_motion(self):
         GPIO = self._gpio
+        consecutive_high = 0
         while not self._stop.is_set():
             motion_detected = GPIO.input(self.pir_pin)
-            if motion_detected and self.secs_since_last_activity > 5:
-                logging.info("Motion detected!")
-                self.secs_since_last_activity = 0  # Reset the counter on motion detection
-                if not self.screen_on:
+            if motion_detected:
+                consecutive_high += 1
+                self.secs_since_last_activity = 0
+                # Wake on motion itself, not on the first sample that happens to
+                # follow a quiet stretch. The previous code gated the wake on
+                # secs_since_last_activity > 5, but the very act of detecting
+                # motion resets that counter, so regular movement held it at 0
+                # and branch one never ran: the screen slept reliably and then
+                # ignored the movement that should have woken it.
+                if not self.screen_on and consecutive_high >= self.wake_debounce_samples:
+                    logging.info("Motion detected while screen was off")
                     self.wake_screen()
-            elif motion_detected:
-                self.secs_since_last_activity = 0  # Reset the counter on motion detection
             else:
+                consecutive_high = 0
                 if self.screen_on and self.secs_since_last_activity >= self.sleep_on_secs:
                     # Only turn off the screen if it's on and the specified time has elapsed since last activity
                     self.sleep_screen()
@@ -125,6 +148,7 @@ class MotionController:
     def stop(self):
         if self.detector:
             self.detector.stop()
+            self.detector.shutdown()
             self.detector = None
 
     def sync(self):
