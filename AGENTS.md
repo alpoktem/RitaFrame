@@ -132,12 +132,63 @@ lines, and do not delete it as redundant.
 Commit messages describe the problem and the fix, not the files touched. Reference the Pi
 behaviour when that is what makes the change non-obvious.
 
+## PIR motion sensor
+
+An AM312 mini PIR drives `pir_pin` (BCM 15 = physical header pin 10). Confirmed working
+by watching the pin and observing wake-from-sleep, so treat the detector as settled code
+and do not re-open the wake logic.
+
+Wiring, as built:
+
+| Signal | Header pin | BCM |
+| --- | --- | --- |
+| `Vin` | 17 | 3.3V |
+| `GND` | 6 | |
+| `OUT` | 10 | 15 |
+
+Three things about this that cost time:
+
+- **Physical pin 10 is GPIO15, not GPIO10.** Physical pin 11 is GPIO17. `config.yaml`
+  originally named 17 and read a pin nothing was attached to. Run `pinout` before
+  trusting any header-to-BCM mapping written from memory.
+- **`Vin` must be on 3.3V (pin 17), not 5V (pin 2).** The AM312 is rated DC 2.7-12V and
+  drives its output from `Vin`, so 5V would put 5V on a 3.3V GPIO. No Pi GPIO is 5V
+  tolerant, so there is no alternative pin that makes 5V safe.
+- **A sensor output wired to a GND pin reads nothing at all.** `OUT` was briefly on
+  physical pin 6, which is GND, so it was shorted to ground. The frame slept correctly
+  and nothing could wake it, because it never saw motion. Symptom to recognise: sleep
+  works, wake never does, and every pin looks quiet.
+
+To check a dead sensor, do not read the pin while the app holds it — RPi.GPIO contention
+makes an unplugged sensor look identical to a working one. Stop the app first, then use
+internal pull-ups to tell a driven pin from a floating one:
+
+```bash
+ssh pi@192.168.0.17 'python3 -c "
+import RPi.GPIO as G, time
+def read(p):
+    G.setmode(G.BCM); G.setup(15, G.IN, pull_up_down=p)
+    time.sleep(0.2); v = G.input(15); G.cleanup(); time.sleep(0.3); return v
+dn, up = read(G.PUD_DOWN), read(G.PUD_UP)
+print(f\"LOW->{dn} HIGH->{up}\")"'
+```
+
+`LOW->0 HIGH->1` means floating: nothing is driving the pin. `LOW->0 HIGH->0` means
+something is holding it low. Either way the sensor is not signalling.
+
+`console=serial0,115200` was removed from `/boot/cmdline.txt` (backup at
+`cmdline.txt.bak`) because GPIO15 is the console's RX. Reading the pin was always safe,
+since the console only listens, but there is no reason to keep the coupling.
+
 ## Planned work
 
 Not started. In rough order of intent:
 
 - **Flip the frame 180°** so the cable input sits at the bottom. `ROTATION=inverted` in
   `etc/rotate-display.sh`, then confirm with `xrandr | head -2`.
+- **Move the PIR's `Vin` to physical pin 17.** It is currently on pin 2 (5V), which risks
+  overdriving the GPIO. The module is rated from 2.7V so this needs no other change, but
+  detection must be re-checked afterwards.
 - **Investigate the light sensor.** `motionio.py` already sleeps and wakes the screen with
   `xset dpms`, but that is driven only by the PIR motion sensor — nothing reads ambient
   light and no light-sensor driver exists. An I2C scan of the Pi's bus found no responding
