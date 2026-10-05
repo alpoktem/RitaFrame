@@ -98,6 +98,13 @@ constructors take plain values, not the loader.
   them from a script does not hold. They are disabled in the autostart file instead.
 - **`lxterminal` leaves a window behind** after its command exits, which then sits on top of
   the frame. Helper scripts are autostarted directly, without a terminal.
+- **The screen outlives the app.** Restarting `run.sh` while the display is off used to wedge
+  motion detection permanently: `MotionDetector` set `screen_on = True` at construction and
+  only ever changed it from its own sleep/wake calls, so it never noticed the monitor was
+  actually off. Motion then took the "screen already on" branch, woke nothing, and the same
+  motion reset the idle counter so it would not re-sleep either. `initialize()` now reads the
+  real state with `is_screen_on()` and logs which it got. Triggers on every restart after a
+  sleep, so it looked intermittent and was not.
 - **Boot needs long timeouts.** ~70s from power-on to serving. Waits default to 300s.
 - **Errors must stay visible.** `surffull.sh` only tidies up *after* the browser is confirmed
   fullscreen, so a failed startup leaves the `run.sh` terminal on screen showing the error.
@@ -178,8 +185,26 @@ dn, up = read(G.PUD_DOWN), read(G.PUD_UP)
 print(f\"LOW->{dn} HIGH->{up}\")"'
 ```
 
-`LOW->0 HIGH->1` means floating: nothing is driving the pin. `LOW->0 HIGH->0` means
-something is holding it low. Either way the sensor is not signalling.
+`LOW->0 HIGH->1` means floating: nothing is driving the pin, so the sensor is not attached.
+
+`LOW->0 HIGH->0` means something *is* driving the pin and holding it low, which is what a
+**working** AM312 looks like at rest — its output idles low and only goes high on motion.
+This reading is not evidence of a fault. Mistaking it for one wasted an hour: the pin was
+sampled for a minute across two windows when nobody was waving, and the idle low was read
+as a short to ground.
+
+So neither of these two results proves the sensor is broken. The only conclusive check is a
+high reading while waving, and the cheapest way to get one is the app's own log — wave at the
+frame with the screen off and look for the pair:
+
+```
+Motion detected while screen was off
+Screen waking up...
+```
+
+`grep -a "Motion detected\|Screen waking" ~/ritaframe.log | tail` gives the history, which is
+also the only record of whether wake has *ever* worked. If motion is detected but no wake
+follows, the problem is in `wake_screen()`, not the sensor.
 
 `console=serial0,115200` was removed from `/boot/cmdline.txt` (backup at
 `cmdline.txt.bak`) because GPIO15 is the console's RX. Reading the pin was always safe,

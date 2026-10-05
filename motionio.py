@@ -19,6 +19,16 @@ class MotionDetector:
         GPIO.setup(self.pir_pin, GPIO.IN)
         self._gpio = GPIO
         self.enabled = True
+        # Ask X what state the monitor is actually in rather than assuming it is on.
+        # The screen outlives the process: a restart while the display is off used to
+        # leave the detector believing it was on, and from then on motion took the
+        # "screen already on" branch and never woke anything. That is unrecoverable
+        # in-process, since the same motion also resets the idle counter, so the frame
+        # stayed dark until the next restart. Happens on every app restart after a
+        # sleep, and after the display sleeps for any other reason.
+        self.screen_on = self.is_screen_on()
+        logging.info('Motion detector initialised, screen is %s',
+                     'on' if self.screen_on else 'off')
 
     def stop(self):
         self._stop.set()
