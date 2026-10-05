@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from bus import BusService
+from icons import weather_icon
 from photos import PhotoService
 from weather import WeatherService
 
@@ -21,7 +22,7 @@ class Services:
         self._built_for = object()
         self._lock = threading.RLock()
         self._weather = None
-        self._bus = None
+        self._buses = []
         self._photos = None
         self._timezone = ZoneInfo('UTC')
 
@@ -47,16 +48,16 @@ class Services:
             cache_ttl_secs=c.get('weather_cache_ttl_secs', 600),
             provider=c.get('weather_provider', 'open-meteo'),
         )
-        self._bus = BusService(
-            stop_id=c.get('bus_stop_id'),
-            line=c.get('bus_line'),
-            destination_filter=c.get('bus_destination_filter'),
+        self._buses = [BusService(
+            stop_id=stop.get('stop_id'),
+            line=stop.get('line'),
+            destination_filter=stop.get('destination_filter'),
             credentials_path=c.get('bus_credentials_path', './credentials/tmb.json'),
             timezone=timezone,
             departures_to_show=c.get('bus_departures_to_show', 3),
             cache_ttl_secs=c.get('bus_poll_interval_secs', 60),
-            expected_stop_name=c.get('bus_expected_stop_name'),
-        )
+            expected_stop_name=stop.get('expected_stop_name'),
+        ) for stop in (c.get('bus_stops') or [])]
         # Retire the previous photo thread so a config edit cannot leave two running.
         if self._photos is not None:
             self._photos.stop()
@@ -70,9 +71,10 @@ class Services:
         return self._weather
 
     @property
-    def bus(self):
+    def buses(self):
+        """One BusService per configured stop, in config order."""
         self._ensure()
-        return self._bus
+        return self._buses
 
     @property
     def photos(self):
@@ -116,12 +118,17 @@ class Services:
                 'temp_max': round(day['temp_max']),
                 'description': day['description'],
                 'icon': day['icon'],
+                # Pre-rendered here so the template only has to interpolate markup.
+                'icon_svg': weather_icon(day['icon']),
                 'precipitation_probability': day.get('precipitation_probability'),
                 'show_precipitation': show_precipitation,
             })
         return days
 
     def bus_departures(self):
+        """One result per configured stop: [{'label', 'result'}], or None if disabled."""
         if not self._config.get('enable_bus', True):
             return None
-        return self.bus.get_departures()
+        stops = self._config.get('bus_stops') or []
+        return [{'label': stop.get('label', ''), 'result': service.get_departures()}
+                for stop, service in zip(stops, self.buses)]

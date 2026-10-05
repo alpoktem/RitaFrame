@@ -13,7 +13,9 @@ port: 8000
 # ---- Appearance ----
 background_color: "#000000"
 text_color: "#ffffff"
-muted_text_color: "#8a8a8a"
+# Kept deliberately light: this is the colour of the date, the section labels and
+# the rain chance, and a mid grey on black is hard to read on a small panel.
+muted_text_color: "#c4c7cc"
 
 # ---- Clock (strftime patterns) ----
 enable_clock: true
@@ -32,12 +34,26 @@ forecast_days: 3                # today plus the next two days
 show_precipitation: true
 
 # ---- Bus (TMB iBus API) ----
+# One entry per stop, rendered as one column each. Line 55 runs between
+# Pl. Urquinaona and Parc de Montjuïc, so each direction needs its own stop:
+# you board toward Montjuïc at one end of the street and toward Urquinaona at
+# the other.
+#
+# Per stop: label (the column heading), stop_id, line (blank = every line),
+# destination_filter (blank disables), expected_stop_name (warns if TMB
+# renames the stop, so blank it when you have not confirmed the live name).
 enable_bus: true
-bus_stop_name: "Bus 55 to school"
-bus_stop_id: "789"              # Pg de l'Exposició - Santa Madrona
-bus_line: "55"                  # Pl. Urquinaona / Parc de Montjuïc
-bus_destination_filter: "Montjuïc"   # blank disables the filter
-bus_expected_stop_name: "Pg de l'Exposició - Santa Madrona"  # warns if TMB renames it
+bus_stops:
+  - label: "55 to Montjuïc"
+    stop_id: "789"
+    line: "55"
+    destination_filter: "Montjuïc"
+    expected_stop_name: "Pg de l'Exposició - Santa Madrona"
+  - label: "55 to Urquinaona"
+    stop_id: "2569"
+    line: "55"
+    destination_filter: "Urquinaona"
+    expected_stop_name: ""
 bus_credentials_path: "./credentials/tmb.json"
 bus_poll_interval_secs: 60
 bus_departures_to_show: 3

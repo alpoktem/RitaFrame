@@ -59,9 +59,10 @@ bus.py             TMB iBus client
 weather.py         Open-Meteo / OpenWeatherMap client
 photos.py          Google Photos (lazy, background thread)
 photosapi.py       Google Photos API wrapper + OAuth token handling
+icons.py           weather glyphs as inline SVG (the Pi has no emoji font)
 motionio.py        PIR motion detection (lazy RPi.GPIO import)
 templates/         clock.html, photos.html
-etc/rotate-display.sh      forces landscape, optional ROTATION= flip
+etc/rotate-display.sh      forces landscape and inverts the mounted frame
 etc/surf/runsurf.sh        waits for the server, opens the browser
 etc/surf/surffull.sh       fullscreen + clears the window stacking
 etc/lxboot/surf/autostart  LXDE session autostart (surf variant)
@@ -152,7 +153,7 @@ Everything lives in `config.yaml`, grouped by feature:
 | Appearance | `background_color`, `text_color`, `muted_text_color` |
 | Clock | `enable_clock`, `clock_timezone`, `clock_format`, `date_format` (strftime) |
 | Weather | `enable_weather`, `weather_provider`, `weather_location`, `forecast_days`, `weather_cache_ttl_secs`, `show_precipitation` |
-| Bus | `enable_bus`, `bus_stop_id`, `bus_line`, `bus_destination_filter`, `bus_expected_stop_name`, `bus_poll_interval_secs`, `bus_departures_to_show` |
+| Bus | `enable_bus`, `bus_stops` (list), `bus_credentials_path`, `bus_poll_interval_secs`, `bus_departures_to_show` |
 | Photos | `enable_photos`, `photos_mode`, `photos_rotation_secs`, `photos_overlay_opacity`, `album_name` |
 | Motion | `run_motion_detection`, `pir_pin` (BCM), `sleep_on_secs` |
 
@@ -176,10 +177,36 @@ controls how many days ahead to show. To use OpenWeatherMap instead, set
 
 Responses are cached for `weather_cache_ttl_secs` so the app isn't hammering the API.
 
+The three days are rendered as columns with the glyph and temperatures largest. Glyphs are
+inline SVG from `icons.py`, not emoji: the Pi has no emoji font installed, so characters
+render as empty boxes there. Coverage also varies per character, which is why only *some*
+glyphs went missing before this was fixed.
+
 ### Bus timetable
 
-Live departures for line **55** toward Parc de Montjuïc, from stop **789**
-(Pg de l'Exposició - Santa Madrona), using the [TMB iBus API](https://developer.tmb.cat/).
+Live departures for line **55** in both directions, using the [TMB iBus API](https://developer.tmb.cat/).
+Line 55 runs between Pl. Urquinaona and Parc de Montjuïc, so each direction leaves from a
+different stop and both are shown side by side. Stops are a list in `config.yaml`:
+
+```yaml
+bus_stops:
+  - label: "55 to Montjuïc"
+    stop_id: "789"        # Pg de l'Exposició - Santa Madrona
+    line: "55"
+    destination_filter: "Montjuïc"
+    expected_stop_name: "Pg de l'Exposició - Santa Madrona"
+  - label: "55 to Urquinaona"
+    stop_id: "2569"
+    line: "55"
+    destination_filter: "Urquinaona"
+    expected_stop_name: ""
+```
+
+Each entry becomes one column on the frame, so adding a third stop is just another entry.
+Per stop: `label` (the column heading), `stop_id`, `line` (blank shows every line),
+`destination_filter` (blank disables) and `expected_stop_name` (blank when you have not
+confirmed the live name). Stop `2569` returns an empty `parades` list and a `null`
+`nom_parada`, which is why its `expected_stop_name` is blank.
 
 Get credentials from [developer.tmb.cat](https://developer.tmb.cat/account/applications) —
 create an application and you'll get an `app_id` and `app_key`. Save them to
@@ -194,10 +221,10 @@ create an application and you'll get an `app_id` and `app_key`. Save them to
 Notes on the data:
 
 - The page reloads on `bus_poll_interval_secs` (60s) because arrival predictions go stale fast.
-- The endpoint returns **every** line serving the stop, so `bus_line` is what keeps unrelated
-  buses off the frame. `bus_destination_filter` narrows to one direction but is only a
+- The endpoint returns **every** line serving the stop, so `line` is what keeps unrelated
+  buses off the frame. `destination_filter` narrows to one direction but is only a
   preference — if it stops matching, the line is still shown rather than claiming no service.
-- `bus_expected_stop_name` is compared against the live name from TMB. If they diverge, the
+- `expected_stop_name` is compared against the live name from TMB. If they diverge, the
   frame shows a warning. This is the signal that a stop has been renamed or relocated and the
   stop code needs updating.
 - iBus v1 documents a single method (arrivals for a stop) and returns only `codi_parada`,
@@ -205,7 +232,11 @@ Notes on the data:
   There is no service-alerts method, so stop-change notices have to come from the name check
   above. Arrival times are predictions from the bus's last known position, accurate to about
   a minute.
-- Failures render as a visible error rather than a stale or fabricated time.
+- Failures render as a visible error rather than a stale or fabricated time. An **empty**
+  `parades` list is not a failure: the API answered, the stop simply has nothing running in
+  the window (stop `789` looks like this around 00:00-06:00), so the column shows a quiet
+  "No buses at this hour" instead of an error. Real failures are 401/403, 404, HTTP >= 400
+  and network errors, all of which still render as an error.
 
 ### Photos (optional, off by default)
 
@@ -272,17 +303,17 @@ The Pi's HDMI output boots **rotated 90 degrees (480x800 portrait)** even though
 physically landscape, so everything starts sideways. `etc/rotate-display.sh` corrects this on
 every boot and picks the landscape mode automatically.
 
-To flip the frame upside down — for example so the cable input ends up at the bottom — set
-`ROTATION=inverted`:
+The frame is mounted with the cable input at the bottom, so the panel is physically upside down
+and the default `ROTATION` is `inverted`. To try another orientation without editing the
+script, pass it in the environment:
 
 ```bash
-ROTATION=inverted ~/Documents/RitaFrame/etc/rotate-display.sh
+ROTATION=normal ~/Documents/RitaFrame/etc/rotate-display.sh
 ```
 
-To make that stick across reboots, edit `ROTATION=` near the top of
-`etc/rotate-display.sh`. Valid values are the `xrandr` rotations: `normal`, `left`, `right`,
-`inverted`. Confirm the result with `xrandr | head -2` — you want to see `800x480` and the
-rotation you chose.
+To change it permanently, edit `ROTATION=` near the top of `etc/rotate-display.sh`. Valid
+values are the `xrandr` rotations: `normal`, `left`, `right`, `inverted`. Confirm the result
+with `xrandr | head -2` — you want to see `800x480` and the rotation you chose.
 
 ### PIR motion sensor
 
@@ -309,8 +340,6 @@ at night. See the planned work below.
 
 Rough order of intent, not yet started:
 
-- **Flip the frame 180°** so the cable input sits at the bottom. Set `ROTATION=inverted` as
-  described above.
 - **Investigate the light sensor.** Nothing reads it today, so first establish what part is
   fitted and how it is wired (I2C vs GPIO vs analog), then decide whether it should dim the
   screen at night.

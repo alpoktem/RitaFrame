@@ -7,12 +7,12 @@
 #
 # Run from ~/.config/autostart, and again from runsurf.sh before the browser opens.
 #
-# To flip the frame upside down (cable input at the bottom) set ROTATION=inverted,
-# either here or in the environment when running this script. Valid values are the
-# xrandr rotations: normal, left, right, inverted.
+# The frame sits with its cable input at the bottom, so the panel is mounted upside
+# down and needs ROTATION=inverted. Valid values are the xrandr rotations: normal,
+# left, right, inverted. Override in the environment for a one-off test.
 
 export DISPLAY="${DISPLAY:-:0}"
-ROTATION="${ROTATION:-normal}"
+ROTATION="${ROTATION:-inverted}"
 
 case "$ROTATION" in
     normal|left|right|inverted) ;;

@@ -82,7 +82,12 @@ constructors take plain values, not the loader.
 
 - **The screen boots portrait.** HDMI comes up rotated 90° (480x800) despite a physically
   landscape panel. `etc/rotate-display.sh` fixes it; `runsurf.sh` calls it again so ordering
-  cannot matter. `ROTATION=inverted` flips it 180°.
+  cannot matter. The frame is mounted upside down, so `ROTATION=inverted` is the default.
+- **The Pi has no emoji font.** `fc-list | grep -c emoji` returns 0, so emoji render as empty
+  boxes on the frame while working fine on a Mac. Coverage also varies per character: `☀️`
+  (U+2600) comes from the plain symbol blocks DejaVu ships, while `⛈` (U+26C8) does not,
+  which is why only some glyphs went missing. Weather glyphs are inline SVG in `icons.py`
+  for this reason. Do not reintroduce emoji characters into the templates.
 - **`xdotool key --window` does not work with surf.** It sends a synthetic event that surf
   ignores. The key must go through XTEST to the activated window.
 - **F11 is a toggle.** Firing it blindly *un*-fullscreens an already-fullscreen window.
@@ -184,8 +189,28 @@ since the console only listens, but there is no reason to keep the coupling.
 
 Not started. In rough order of intent:
 
-- **Flip the frame 180°** so the cable input sits at the bottom. `ROTATION=inverted` in
-  `etc/rotate-display.sh`, then confirm with `xrandr | head -2`.
+### Known bugs (found 2026-10-05)
+
+Both are reachable from a laptop without touching the Pi, so fix them locally and
+deploy with the usual pull/restart.
+
+- **Weather silently fabricates a forecast.** `weather.py:70-74` catches `Exception` and
+  falls back to `_mock_forecast()`, which returns three hardcoded days (19-24C partly
+  cloudy, 20-26C sunny, 18-23C light rain, `weather.py:161-178`). Any failure — DNS,
+  timeout, bad status — renders invented weather with no error. This directly violates
+  "never fabricate data" and is worse than the bus error it sits next to, because a bus
+  failure is at least visible while the fake forecast is silent. Render a visible error
+  instead, and drop `_mock_forecast()` entirely.
+- **Clock drifts when offline and nothing says so.** The app never sets the time.
+  `services.now()` (`services.py:87`) is just `datetime.now(ZoneInfo('Europe/Madrid'))`,
+  a read of the Pi's system clock, and nothing in `run.sh` or the app does NTP. With no
+  network the Pi cannot sync and drifts — the frame was showing 23:57 when the real time
+  was 00:29. A Zero has no real RTC, so expect drift whenever WiFi drops. At minimum
+  surface an unsynced clock; better, have `run.sh` attempt an `ntpdate`/SNTP sync on start
+  so a reboot after a WiFi outage self-corrects.
+
+### Hardware and design
+
 - **Move the PIR's `Vin` to physical pin 17.** It is currently on pin 2 (5V), which risks
   overdriving the GPIO. The module is rated from 2.7V so this needs no other change, but
   detection must be re-checked afterwards.
@@ -201,6 +226,10 @@ Not started. In rough order of intent:
 ## Reference
 
 - TMB iBus: <https://developer.tmb.cat/api-docs/v1/ibus> — one method, arrivals for a stop.
-- Stop `789` is `Pg de l'Exposició - Santa Madrona`, served by line 55 toward Parc de Montjuïc.
+- Line 55 runs between Pl. Urquinaona and Parc de Montjuïc, so each direction needs its own
+  stop: `789` is `Pg de l'Exposició - Santa Madrona` toward Montjuïc, `2569` is the other
+  end. Stops are configured as a list in `config.yaml` (`bus_stops`), one column each.
+- Stop `2569` returns `{"timestamp": ..., "parades": []}` — reachable but nothing running,
+  and `nom_parada` is `null`, so its `expected_stop_name` is left blank rather than guessed.
 - The current Google Photos OAuth client is dead (`deleted_client`), so photos need a fresh
   client plus a one-off `/photos/auth` login before they will load.

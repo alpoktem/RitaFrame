@@ -38,11 +38,14 @@
             padding: 4vmin 5vmin;
             display: grid;
             grid-template-rows: auto 1fr auto;
-            gap: 3vmin;
+            gap: 1.6vmin;
         }
 
+        /* The panel is small and read from across a room, so everything except the
+           clock is sized to stay legible at a glance rather than to look refined.
+           vmin resolves against the 480px edge, so 1vmin is under 5px here. */
         .label {
-            font-size: 1.5vmin;
+            font-size: 2.4vmin;
             letter-spacing: 0.28em;
             text-transform: uppercase;
             color: var(--muted);
@@ -65,79 +68,105 @@
             color: var(--muted);
         }
 
-        /* ---- Weather ---- */
-        .weather { align-self: start; }
+        /* ---- Weather ----
+           Three day columns side by side rather than stacked rows: the glyph and the
+           temperatures are the numbers you actually read across the room, so they
+           get the space and the prose (description, rain chance) is demoted. */
+        /* Stretched rather than aligned to the top so the spare vertical space goes into the
+           day cards instead of becoming a dead gap above the bus row. */
+        .weather {
+            align-self: stretch;
+            display: flex;
+            flex-direction: column;
+        }
         .forecast {
-            margin-top: 2vmin;
+            flex: 1;
+            margin-top: 1.4vmin;
             display: grid;
-            gap: 1.6vmin;
+            grid-template-columns: repeat({{ weather_forecast|length or 1 }}, 1fr);
+            gap: 1.4vmin;
         }
         .forecast-day {
-            display: grid;
-            grid-template-columns: 16vmin 5vmin 1fr auto;
+            display: flex;
+            flex-direction: column;
             align-items: center;
-            gap: 2vmin;
-            padding: 1.6vmin 2vmin;
+            justify-content: center;
+            text-align: center;
+            gap: 0.6vmin;
+            padding: 1.4vmin 1.2vmin;
             border-radius: 1.6vmin;
             background-color: rgba(255, 255, 255, 0.05);
         }
         .forecast-day .day {
-            font-size: 2.8vmin;
+            font-size: 3.4vmin;
             font-weight: 400;
         }
         .forecast-day .day small {
             display: block;
-            font-size: 1.7vmin;
+            font-size: 2.2vmin;
             color: var(--muted);
             font-weight: 300;
         }
-        .forecast-day .glyph { font-size: 4vmin; line-height: 1; }
+        /* Sized on the svg itself: a font-size would do nothing now that the glyphs are
+           paths rather than characters. Width is capped by the column, so the icons
+           stay square on any forecast length. */
+        .forecast-day .glyph {
+            display: flex;
+            width: 100%;
+            max-width: 12vmin;
+            aspect-ratio: 1;
+        }
+        .forecast-day .glyph svg { width: 100%; height: 100%; display: block; }
+        .forecast-day .temps {
+            font-size: 6.4vmin;
+            font-weight: 300;
+            line-height: 1.1;
+            font-variant-numeric: tabular-nums;
+        }
+        .forecast-day .temps .lo { color: var(--muted); }
         .forecast-day .desc {
-            font-size: 2.4vmin;
+            font-size: 2.6vmin;
             color: var(--muted);
             font-weight: 300;
         }
         .forecast-day .rain {
-            font-size: 2vmin;
+            font-size: 2.4vmin;
             color: var(--muted);
             font-weight: 300;
         }
-        .forecast-day .temps {
-            font-size: 3.4vmin;
-            font-weight: 300;
-            font-variant-numeric: tabular-nums;
-        }
-        .forecast-day .temps .lo { color: var(--muted); }
 
-        /* ---- Bus ---- */
+        /* ---- Bus ----
+           One column per stop, because line 55 runs in both directions and each
+           direction leaves from a different stop. The route line ("55 -> Parc de
+           Montjuic") is gone: the column label already says which way this is, and
+           repeating it under every departure crowded out the times. */
         .bus { align-self: end; }
-        .departures {
-            margin-top: 1.6vmin;
+        .bus-stops {
+            margin-top: 1.2vmin;
             display: grid;
-            grid-template-columns: repeat({{ bus_result.departures|length or 1 }}, 1fr);
+            grid-template-columns: repeat({{ bus_stops|length or 1 }}, 1fr);
             gap: 1.6vmin;
         }
+        .departures {
+            margin-top: 1.2vmin;
+            display: grid;
+            gap: 1.2vmin;
+        }
         .departure {
-            padding: 2vmin;
+            padding: 1.6vmin;
             border-radius: 1.6vmin;
             background-color: rgba(255, 255, 255, 0.05);
             text-align: center;
         }
         .departure .time {
-            font-size: 6vmin;
+            font-size: 6.4vmin;
             font-weight: 300;
             line-height: 1;
             font-variant-numeric: tabular-nums;
         }
-        .departure .route {
-            margin-top: 1vmin;
-            font-size: 2.2vmin;
-            font-weight: 500;
-            color: var(--muted);
-        }
         .departure .mins {
-            margin-top: 0.4vmin;
-            font-size: 2vmin;
+            margin-top: 0.8vmin;
+            font-size: 3.6vmin;
             color: var(--muted);
             font-weight: 300;
         }
@@ -149,14 +178,14 @@
             border-radius: 1.2vmin;
             background-color: rgba(255, 193, 7, 0.15);
             color: #ffd54f;
-            font-size: 2vmin;
+            font-size: 2.6vmin;
             line-height: 1.4;
         }
         .bus-empty, .bus-error {
-            margin-top: 1.6vmin;
-            padding: 2vmin;
+            margin-top: 1.2vmin;
+            padding: 1.6vmin;
             border-radius: 1.6vmin;
-            font-size: 2.4vmin;
+            font-size: 3vmin;
         }
         .bus-empty {
             background-color: rgba(255, 255, 255, 0.05);
@@ -187,7 +216,7 @@
                 {% for day in weather_forecast %}
                 <div class="forecast-day">
                     <div class="day">{{ day.label }}<small>{{ day.date_label }}</small></div>
-                    <div class="glyph" data-icon="{{ day.icon }}"></div>
+                    <div class="glyph">{{ day.icon_svg|safe }}</div>
                     <div>
                         <div class="desc">{{ day.description }}</div>
                         {% if day.show_precipitation and day.precipitation_probability is not none %}
@@ -201,46 +230,41 @@
             {% endif %}
         </section>
 
-        {% if enable_bus and bus_result %}
+        {% if enable_bus and bus_stops %}
         <section class="bus">
-            <div class="label">{{ bus_stop_name }}</div>
-            {% if bus_result.notices %}
-            <ul class="notices">
-                {% for notice in bus_result.notices %}
-                <li>{{ notice }}</li>
-                {% endfor %}
-            </ul>
-            {% endif %}
-            {% if bus_result.ok and bus_result.departures %}
-            <div class="departures">
-                {% for bus in bus_result.departures %}
-                <div class="departure">
-                    <div class="time">{{ bus.time }}</div>
-                    <div class="route">{{ bus.line }} &rarr; {{ bus.destination }}</div>
-                    <div class="mins">in {{ bus.minutes }} min</div>
+            <div class="bus-stops">
+                {% for stop in bus_stops %}
+                <div class="bus-stop">
+                    <div class="label">{{ stop.label }}</div>
+                    {% if stop.result.notices %}
+                    <ul class="notices">
+                        {% for notice in stop.result.notices %}
+                        <li>{{ notice }}</li>
+                        {% endfor %}
+                    </ul>
+                    {% endif %}
+                    {% if not stop.result.ok %}
+                    <div class="bus-error">{{ stop.result.error }}</div>
+                    {% elif not stop.result.service %}
+                    <div class="bus-empty">No buses at this hour</div>
+                    {% else %}
+                    <div class="departures" style="grid-template-columns: repeat({{ stop.result.departures|length or 1 }}, 1fr)">
+                        {% for bus in stop.result.departures %}
+                        <div class="departure">
+                            <div class="time">{{ bus.time }}</div>
+                            <div class="mins">in {{ bus.minutes }} min</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
-            {% elif bus_result.ok %}
-            <div class="bus-empty">No more buses from this stop today</div>
-            {% else %}
-            <div class="bus-error">{{ bus_result.error }}</div>
-            {% endif %}
         </section>
         {% endif %}
     </main>
 
     <script>
-        // Render weather glyphs from the WMO codes assigned server-side.
-        const GLYPHS = {
-            '01': '\u2600\uFE0F', '02': '\u26C5', '03': '\u26C5', '04': '\u2601\uFE0F',
-            '09': '\u{1F327}\uFE0F', '10': '\u{1F327}\uFE0F', '11': '\u26C8',
-            '13': '\u{1F327}\uFE0F', '14': '\u{1F328}', '50': '\u{1F32B}\uFE0F'
-        };
-        document.querySelectorAll('.glyph').forEach(el => {
-            el.textContent = GLYPHS[el.dataset.icon] || '\u26C5';
-        });
-
         // Tick the clock locally between server syncs so it never looks frozen.
         // We derive a fixed offset (server - browser) once, then add elapsed time,
         // so the display stays correct even if the browser's timezone differs.

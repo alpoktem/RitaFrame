@@ -100,10 +100,22 @@ class BusService:
             return self._fail(f'Could not read the TMB response: {e}')
 
     def _parse(self, payload):
+        now = datetime.now(self.timezone)
         server_ms = payload.get('timestamp')
         parades = payload.get('parades') or []
         if not parades:
-            return self._fail(f'TMB returned no data for stop {self.stop_id}')
+            # An empty list is the API working, not failing: it is what iBus returns
+            # for a stop with no service in the window, so stop 789 looks like this
+            # between roughly 00:00 and 06:00. Callers render a quiet empty state.
+            logging.info('No parades in the TMB response for stop %s', self.stop_id)
+            return {
+                'ok': True,
+                'stop_name': None,
+                'service': False,
+                'departures': [],
+                'notices': [],
+                'fetched_at': now.strftime('%H:%M:%S'),
+            }
 
         stop_name = parades[0].get('nom_parada') or f'Stop {self.stop_id}'
 
@@ -137,7 +149,6 @@ class BusService:
                     'No trajectory at stop %s matched destination %r; showing all for the line',
                     self.stop_id, self.destination_filter)
 
-        now = datetime.now(self.timezone)
         now_ms = int(now.timestamp() * 1000)
         if not server_ms:
             server_ms = now_ms
@@ -166,6 +177,9 @@ class BusService:
         return {
             'ok': True,
             'stop_name': stop_name,
+            # Tells the template the stop is reachable but has nothing running now, so
+            # it can say so quietly instead of implying an error.
+            'service': bool(departures),
             'departures': departures[:self.departures_to_show],
             'notices': notices,
             'fetched_at': now.strftime('%H:%M:%S'),

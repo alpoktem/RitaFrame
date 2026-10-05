@@ -98,7 +98,9 @@ def register_routes(app, config, services, motion):
     def api_bus():
         if not config.get('enable_bus', True):
             return jsonify({'enabled': False})
-        return jsonify({'enabled': True, 'bus': services.bus.get_departures()})
+        return jsonify({'enabled': True,
+                        'stops': [{'label': s['label'], **s['result']}
+                                  for s in (services.bus_departures() or [])]})
 
     @app.route('/api/photos/next')
     def api_photos_next():
@@ -116,7 +118,7 @@ def register_routes(app, config, services, motion):
     @app.route('/api/status')
     def api_status():
         """Diagnostics for a headless frame: active view, feature flags, service health."""
-        bus_result = services.bus_departures() if config.get('enable_bus', True) else None
+        bus_stops = services.bus_departures() if config.get('enable_bus', True) else None
         return jsonify({
             'view': config.get('view', DEFAULT_VIEW),
             'available_views': sorted(VIEWS),
@@ -131,8 +133,10 @@ def register_routes(app, config, services, motion):
                 # visible rather than looking like a working one.
                 'motion_running': motion.running,
             },
-            'bus': {'ok': bus_result.get('ok'), 'error': bus_result.get('error')}
-                   if bus_result else None,
+            'bus': [{'label': s['label'], 'ok': s['result'].get('ok'),
+                     'error': s['result'].get('error'),
+                     'service': s['result'].get('service')}
+                    for s in bus_stops] if bus_stops else None,
             'photos': {'status': services.photos.status, 'error': services.photos.error,
                        'has_photo': services.photos.current_url() is not None},
             'render': base_context(config, services)['current_time'],

@@ -39,8 +39,7 @@ def clock_view(config, services):
         enable_bus=config.get('enable_bus', True),
         weather_location=config.get('weather_location', 'Barcelona,ES'),
         weather_forecast=services.weather_forecast() if config.get('enable_weather', True) else [],
-        bus_result=services.bus_departures(),
-        bus_stop_name=config.get('bus_stop_name', 'Bus schedule'),
+        bus_stops=services.bus_departures() or [],
     ))
 
 
