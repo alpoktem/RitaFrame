@@ -69,9 +69,15 @@ class BusService:
             return result
 
     def _fail(self, error):
-        """Uniform failure shape so the template never has to guess."""
+        """Uniform failure shape so the template never has to guess.
+
+        The detailed reason goes to the log; the frame only ever shows the
+        short public message. A user fighting the bluetooth speaker next to
+        the router does not care that an SSLError wrapped a ConnectionPool.
+        """
         logging.error('Bus lookup failed: %s', error)
-        return {'ok': False, 'error': error, 'departures': [], 'notices': []}
+        return {'ok': False, 'error': "Couldn't fetch bus information from TMB",
+                'departures': [], 'notices': []}
 
     def _fetch(self):
         try:
