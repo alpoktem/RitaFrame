@@ -28,6 +28,9 @@ def base_context(config, services, **extra):
         # The Pi has no RTC: until boot-time NTP sync lands, the clock and the
         # bus minutes are both a guess. Banner when that happens.
         'clock_synced': services.clock_synced(),
+        # Wifi is the frame's only uplink: when it is down, stale bus times are
+        # the rule, not the exception, and an unsynced clock cannot be fixed.
+        'wifi_online': services.wifi_online(),
         'weather_error': getattr(services.weather, 'error', None),
     }
     context.update(extra)

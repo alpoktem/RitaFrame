@@ -141,6 +141,7 @@ def register_routes(app, config, services, motion):
                        'has_photo': services.photos.current_url() is not None},
             'render': base_context(config, services)['current_time'],
             'clock_synced': services.clock_synced(),
+            'wifi_online': services.wifi_online(),
             'weather_error': getattr(services.weather, 'error', None),
         })
 

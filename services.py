@@ -107,6 +107,23 @@ class Services:
             return os.path.exists(marker)
         return True
 
+    def wifi_online(self):
+        """True when wlan0 has a carrier, read from sysfs (no network I/O).
+
+        The frame is wifi-only, so if the link is down the bus minutes are
+        stale and an unsynced clock cannot be corrected. This is deliberately
+        a local file read: probing reachability would block a request thread
+        and made no sense when the point is just to warn that the link is down.
+        A non-Pi machine has no wlan0; assume it is fine.
+        """
+        import os
+        state_file = '/sys/class/net/wlan0/operstate'
+        try:
+            with open(state_file) as f:
+                return f.read().strip() == 'up'
+        except OSError:
+            return True
+
     def weather_forecast(self):
         """Forecast days shaped for display, honouring forecast_days/show_precipitation."""
         forecast_days = int(self._config.get('forecast_days', 3))

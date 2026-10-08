@@ -220,6 +220,8 @@
     {% if background_image %}<div class="backdrop"></div>{% endif %}
     {% if not clock_synced %}
     <div class="offline-banner">CLOCK NOT SYNCED &mdash; TIME AND BUS TIMES MAY BE WRONG</div>
+    {% elif not wifi_online %}
+    <div class="offline-banner">WIFI OFF &mdash; BUS TIMES MAY BE WRONG</div>
     {% endif %}
     <main class="frame">
         {% if enable_clock %}
