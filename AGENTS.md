@@ -226,27 +226,41 @@ since the console only listens, but there is no reason to keep the coupling.
 
 ## Planned work
 
-Not started. In rough order of intent:
+Done, then re-diagnosed (updated 2026-10-08):
 
-### Known bugs (found 2026-10-05)
+- **Weather no longer fabricates a forecast.** Fixed: `_mock_forecast()` is gone and any
+  failure surfaces as a visible "Weather unavailable" (`weather_error` in context).
+- **Clock.** Fixed twice. The headline change: `run.sh` now restarts `systemd-timesyncd`
+  once at startup so NTP corrects the clock in seconds instead of the 1-1.5h it was taking.
+  But note the Pi's clock was found wrong again the same evening without any boot — a WiFi
+  blip caused `run.sh` to be relaunched while the frame was live. The deeper issue stands:
+  **a Pi Zero with no RTC can only show a correct time when it has reached NTP once since
+  boot, and nothing keeps it correct if WiFi stays down long enough to drift.** The banner
+  (`NOT clock_synced` / `WIFI OFF`) is the safety net. A DS3231 I2C RTC (~2 EUR) would make
+  the clock genuinely unfailable, but the owner has deferred it. `systemd-timesyncd`'s sync
+  marker is `/run/systemd/timesync/synchronized`, created by timesyncd, read by
+  `services.clock_synced()`.
 
-Both are reachable from a laptop without touching the Pi, so fix them locally and
-deploy with the usual pull/restart.
+### Known bugs (found 2026-10-05, both FIXED 2026-10-08)
 
-- **Weather silently fabricates a forecast.** `weather.py:70-74` catches `Exception` and
-  falls back to `_mock_forecast()`, which returns three hardcoded days (19-24C partly
-  cloudy, 20-26C sunny, 18-23C light rain, `weather.py:161-178`). Any failure — DNS,
-  timeout, bad status — renders invented weather with no error. This directly violates
-  "never fabricate data" and is worse than the bus error it sits next to, because a bus
-  failure is at least visible while the fake forecast is silent. Render a visible error
-  instead, and drop `_mock_forecast()` entirely.
-- **Clock drifts when offline and nothing says so.** The app never sets the time.
-  `services.now()` (`services.py:87`) is just `datetime.now(ZoneInfo('Europe/Madrid'))`,
-  a read of the Pi's system clock, and nothing in `run.sh` or the app does NTP. With no
-  network the Pi cannot sync and drifts — the frame was showing 23:57 when the real time
-  was 00:29. A Zero has no real RTC, so expect drift whenever WiFi drops. At minimum
-  surface an unsynced clock; better, have `run.sh` attempt an `ntpdate`/SNTP sync on start
-  so a reboot after a WiFi outage self-corrects.
+- **Weather silently fabricates a forecast.** Was `weather.py:70-74` catching `Exception`
+  and falling back to `_mock_forecast()` (three hardcoded days). Any failure — DNS, timeout,
+  bad status — rendered invented weather. Fixed: render a visible "Weather unavailable"
+  error instead; `_mock_forecast()` deleted.
+- **Clock drifts when offline and nothing says so.** Was: nothing set the time, NTP sync
+  took an hour+, frame showed 23:57 when real time was 00:29. Fixed: boot-time timesyncd
+  kick in `run.sh` plus a frame banner for unsynced/WiFi-off states. The Pi has no RTC, so
+  drift during long WiFi loss is still possible — see the banner.
+
+### Frame-state flags (what the UI actually shows)
+
+- `services.wifi_online()` reads `/sys/class/net/wlan0/operstate` (a file, so it cannot
+  block a request). `services.clock_synced()` stats the timesyncd marker. Both feed the
+  red banner in `clock.html`: "CLOCK NOT SYNCED" when the marker is absent, "WIFI OFF" when
+  the link is down. The clock keeps ticking while offline — it is the Pi system clock, not
+  an HTTP read.
+- Bus failures render the single line "Couldn't fetch bus information from TMB" — the raw
+  exception goes only to the log. Weather failures: "Weather unavailable".
 
 ### Hardware and design
 
