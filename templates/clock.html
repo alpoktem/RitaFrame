@@ -171,6 +171,25 @@
             font-weight: 300;
         }
 
+        /* Offline banner: the Pi has no RTC, so no WiFi means the clock and the
+           bus minutes are both guesses. Shown loud because acting on them is worse
+           than having no frame at all. */
+        .offline-banner {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            padding: 1.4vmin 2vmin;
+            background-color: rgba(244, 67, 54, 0.92);
+            color: #fff;
+            font-size: 3vmin;
+            font-weight: 500;
+            text-align: center;
+            letter-spacing: 0.04em;
+        }
+        /* Push the content down when the banner is showing so it does not sit on top of the clock. */
+        .offline-banner + .frame { padding-top: 8vmin; }
         .notices {
             margin: 1.2vmin 0 0;
             padding: 1.2vmin 1.6vmin 1.2vmin 3.4vmin;
@@ -199,6 +218,9 @@
 </head>
 <body>
     {% if background_image %}<div class="backdrop"></div>{% endif %}
+    {% if not clock_synced %}
+    <div class="offline-banner">CLOCK NOT SYNCED &mdash; TIME AND BUS TIMES MAY BE WRONG</div>
+    {% endif %}
     <main class="frame">
         {% if enable_clock %}
         <section class="clock">
@@ -210,8 +232,9 @@
         {% endif %}
 
         <section class="weather">
-            {% if enable_weather and weather_forecast %}
+            {% if enable_weather %}
             <div class="label">Weather &middot; {{ weather_location }}</div>
+            {% if weather_forecast %}
             <div class="forecast">
                 {% for day in weather_forecast %}
                 <div class="forecast-day">
@@ -227,6 +250,9 @@
                 </div>
                 {% endfor %}
             </div>
+            {% elif weather_error %}
+            <div class="bus-error">Weather unavailable</div>
+            {% endif %}
             {% endif %}
         </section>
 

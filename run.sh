@@ -6,6 +6,15 @@ export DEBUG_MODE="${DEBUG_MODE:-False}"
 
 LOG="${RITAFRAME_LOG:-$HOME/ritaframe.log}"
 
+# Sync time once at startup. The Pi has no RTC; systemd-timesyncd alone took an
+# hour to correct the clock after boot, so nudge it to sync straight away and
+# the app just keeps the system time from there on.
+(
+  sleep 5
+  sudo systemctl restart systemd-timesyncd 2>/dev/null || true
+  echo "boot-time-sync: $(date '+%Y-%m-%d %H:%M:%S')" >> "$LOG"
+) &
+
 # Fail loudly on a missing dependency. Without this the app exits silently and the
 # browser just shows "Connection refused", which is hard to trace back to setup.
 missing=()

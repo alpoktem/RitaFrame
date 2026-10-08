@@ -140,6 +140,8 @@ def register_routes(app, config, services, motion):
             'photos': {'status': services.photos.status, 'error': services.photos.error,
                        'has_photo': services.photos.current_url() is not None},
             'render': base_context(config, services)['current_time'],
+            'clock_synced': services.clock_synced(),
+            'weather_error': getattr(services.weather, 'error', None),
         })
 
 

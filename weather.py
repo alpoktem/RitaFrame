@@ -59,6 +59,7 @@ class WeatherService:
         self._cache = None
         self._cache_time = 0.0
         self._coords = None
+        self._error = None
 
     def get_forecast(self):
         """Return a list of day dicts for today plus the next two days."""
@@ -69,13 +70,20 @@ class WeatherService:
 
             try:
                 forecast = self._fetch_forecast()
+                self._error = None
             except Exception as e:
-                logging.warning(f"Weather fetch failed ({e}); falling back to mock data")
-                forecast = self._mock_forecast()
+                logging.error(f"Weather fetch failed: {e}")
+                self._error = str(e)
+                forecast = []
 
             self._cache = forecast
             self._cache_time = time.time()
             return forecast
+
+    @property
+    def error(self):
+        with self._lock:
+            return self._error
 
     def _fetch_forecast(self):
         if self.provider == 'openweathermap':
@@ -157,22 +165,3 @@ class WeatherService:
     def _geocode_query(self):
         """Open-Meteo geocoding wants a bare place name, so drop any ",CC" suffix."""
         return self.location.split(',')[0].strip()
-
-    def _mock_forecast(self):
-        from datetime import date, timedelta
-
-        today = date.today()
-        samples = [
-            (19.0, 24.0, 'Partly cloudy', '02', 20),
-            (20.0, 26.0, 'Sunny', '01', 10),
-            (18.0, 23.0, 'Light rain', '10', 60),
-        ]
-        return [{
-            'date': (today + timedelta(days=idx)).isoformat(),
-            'temp_min': lo,
-            'temp_max': hi,
-            'precipitation_probability': rain,
-            'description': desc,
-            'icon': icon,
-            'weather_code': None,
-        } for idx, (lo, hi, desc, icon, rain) in enumerate(samples)]

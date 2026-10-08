@@ -7,6 +7,7 @@ whenever the config file's mtime changes, so the whole app honours live edits.
 
 import logging
 import threading
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -88,6 +89,23 @@ class Services:
 
     def now(self):
         return datetime.now(self.timezone)
+
+    def clock_synced(self):
+        """True once NTP has corrected the clock since boot.
+
+        The Pi has no RTC, so a fresh boot shows a guessed time until
+        timesyncd does its first sync. timesyncd drops an empty marker file
+        once it has synchronized; its absence is the honest signal that the
+        frame's clock is wrong and the bus minutes next to it are too. A cheap
+        stat on the request path, no network. On a dev laptop there is no
+        timesyncd marker and the machine has its own battery-backed clock, so
+        treat it as synced.
+        """
+        import os
+        marker = '/run/systemd/timesync/synchronized'
+        if os.path.isdir(os.path.dirname(marker)):
+            return os.path.exists(marker)
+        return True
 
     def weather_forecast(self):
         """Forecast days shaped for display, honouring forecast_days/show_precipitation."""

@@ -25,6 +25,10 @@ def base_context(config, services, **extra):
         'background_image': services.photos.background_url(),
         'overlay_opacity': config.get('photos_overlay_opacity', 0.45),
         'refresh_secs': config.get('bus_poll_interval_secs', 60),
+        # The Pi has no RTC: until boot-time NTP sync lands, the clock and the
+        # bus minutes are both a guess. Banner when that happens.
+        'clock_synced': services.clock_synced(),
+        'weather_error': getattr(services.weather, 'error', None),
     }
     context.update(extra)
     return context
