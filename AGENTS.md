@@ -48,6 +48,20 @@ git push origin main
 cd ~/Documents/RitaFrame && git pull && ./run.sh
 ```
 
+**After restarting the app, reload surf once it answers.** surf auto-refreshes every 60s
+through page JavaScript, but when it hits a refused connection it swaps the page for a
+static error with no JS, so it never recovers by itself. The only way the frame can land on
+that white screen is an app restart while surf is live (normal idle time and boots are
+safe: `runsurf.sh` waits for the app before opening the URL). So after any restart, once
+`curl -s http://127.0.0.1:8000/api/status` returns 200, send the reload:
+
+```bash
+ssh pi@192.168.0.17 'DISPLAY=:0 xdotool key --clearmodifiers ctrl+r'
+```
+
+`pkill -f app.py` also matches its own enclosing shell when the pattern literally appears in
+the command line. Use `pkill -f "[a]pp.py"` instead.
+
 Verify on the Pi with `curl`, not by looking at the screen — SSH is faster and gives exact
 values:
 
